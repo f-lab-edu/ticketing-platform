@@ -7,10 +7,10 @@ services:
     restart: unless-stopped
 
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ticket
-      MYSQL_USER: user
-      MYSQL_PASSWORD: user153
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
 
     ports:
       - "3306:3306"
