@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ticket-service-mysql
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ticket
+      MYSQL_USER: user
+      MYSQL_PASSWORD: user153
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - ticket-service-data:/var/lib/mysql
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+volumes:
+  ticket-service-data:
