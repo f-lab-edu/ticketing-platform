@@ -1,8 +1,14 @@
 package com.ticket_service.ticket.entity;
 
 import com.ticket_service.concert.entity.Concert;
+import com.ticket_service.ticket.exception.InsufficientTicketStockException;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
 public class TicketStock {
     @Id
@@ -14,5 +20,36 @@ public class TicketStock {
 
     private int totalQuantity;
 
+    @Getter
     private int remainingQuantity;
+
+    @Builder
+    public TicketStock(Long id, Concert concert, int totalQuantity, int remainingQuantity) {
+        if (totalQuantity < 0) {
+            throw new IllegalArgumentException("totalQuantity must be >= 0");
+        }
+        if (remainingQuantity < 0) {
+            throw new IllegalArgumentException("remainingQuantity must be >= 0");
+        }
+        if (remainingQuantity > totalQuantity) {
+            throw new IllegalArgumentException("remainingQuantity cannot exceed totalQuantity");
+        }
+
+        this.id = id;
+        this.concert = concert;
+        this.totalQuantity = totalQuantity;
+        this.remainingQuantity = remainingQuantity;
+    }
+
+    public void decreaseQuantity(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be positive");
+        }
+
+        if (remainingQuantity < quantity) {
+            throw new InsufficientTicketStockException(remainingQuantity, quantity);
+        }
+
+        remainingQuantity -= quantity;
+    }
 }
