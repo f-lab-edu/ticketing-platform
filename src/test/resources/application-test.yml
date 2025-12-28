@@ -1,8 +1,9 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: jdbc:mysql://localhost:3307/ticket_test
+    username: test
+    password: test
+
   jpa:
     hibernate:
       ddl-auto: create-drop
