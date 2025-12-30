@@ -25,6 +25,21 @@ public class TicketStock {
 
     @Builder
     public TicketStock(Long id, Concert concert, int totalQuantity, int remainingQuantity) {
+        validateQuantities(totalQuantity, remainingQuantity);
+
+        this.id = id;
+        this.concert = concert;
+        this.totalQuantity = totalQuantity;
+        this.remainingQuantity = remainingQuantity;
+    }
+
+    public void decreaseQuantity(int requestQuantity) {
+        validateDecreaseQuantity(requestQuantity);
+
+        remainingQuantity -= requestQuantity;
+    }
+
+    private void validateQuantities(int totalQuantity, int remainingQuantity) {
         if (totalQuantity < 0) {
             throw new IllegalArgumentException("totalQuantity must be >= 0");
         }
@@ -34,22 +49,14 @@ public class TicketStock {
         if (remainingQuantity > totalQuantity) {
             throw new IllegalArgumentException("remainingQuantity cannot exceed totalQuantity");
         }
-
-        this.id = id;
-        this.concert = concert;
-        this.totalQuantity = totalQuantity;
-        this.remainingQuantity = remainingQuantity;
     }
 
-    public void decreaseQuantity(int quantity) {
-        if (quantity <= 0) {
+    private void validateDecreaseQuantity(int requestQuantity) {
+        if (requestQuantity <= 0) {
             throw new IllegalArgumentException("quantity must be positive");
         }
-
-        if (remainingQuantity < quantity) {
-            throw new InsufficientTicketStockException(remainingQuantity, quantity);
+        if (remainingQuantity < requestQuantity) {
+            throw new InsufficientTicketStockException(remainingQuantity, requestQuantity);
         }
-
-        remainingQuantity -= quantity;
     }
 }
