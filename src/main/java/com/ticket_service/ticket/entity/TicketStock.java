@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
 public class TicketStock {
@@ -20,7 +21,6 @@ public class TicketStock {
 
     private int totalQuantity;
 
-    @Getter
     private int remainingQuantity;
 
     @Builder
