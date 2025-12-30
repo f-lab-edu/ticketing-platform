@@ -1,66 +1,95 @@
 package com.ticket_service.ticket.service;
 
 import com.ticket_service.ticket.entity.TicketStock;
+import com.ticket_service.ticket.exception.InsufficientTicketStockException;
 import com.ticket_service.ticket.repository.TicketStockRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
-@ActiveProfiles("test")
-@SpringBootTest
+@ExtendWith(MockitoExtension.class)
 class TicketStockServiceTest {
-
-    @Autowired
-    private TicketStockService ticketStockService;
-
-    @Autowired
+    @Mock
     private TicketStockRepository ticketStockRepository;
 
-    @DisplayName("synchronized 메서드는 다중 스레드 환경에서 티켓 재고를 안전하게 차감한다")
+    @InjectMocks
+    private TicketStockService ticketStockService;
+
+    @DisplayName("재고 차감 성공 - 재고가 충분한 경우")
     @Test
-    void synchronized_decrease_should_be_thread_safe() throws Exception {
+    void decrease_success_when_sufficient_stock() {
         // given
-        int initialQuantity = 1000;
-        int threadCount = 1000;
-        int requestQuantityPerThread = 1;
+        Long ticketStockId = 1L;
+        int requestQuantity = 5;
+        int initialQuantity = 100;
+        int resultRemainingQuantity = 95;
 
-        TicketStock ticketStock = ticketStockRepository.save(
-                TicketStock.builder()
-                        .totalQuantity(initialQuantity)
-                        .remainingQuantity(initialQuantity)
-                        .build()
-        );
+        TicketStock ticketStock = TicketStock.builder()
+                .totalQuantity(initialQuantity)
+                .remainingQuantity(initialQuantity)
+                .build();
 
-        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        given(ticketStockRepository.findByIdWithPessimisticLock(ticketStockId))
+                .willReturn(Optional.of(ticketStock));
 
         // when
-        for (int i = 0; i < threadCount; i++) {
-            executorService.submit(() -> {
-                try {
-                    ticketStockService.decrease(ticketStock.getId(), requestQuantityPerThread);
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        latch.await(); // 모든 스레드 종료 대기
-        executorService.shutdown();
+        ticketStockService.decrease(ticketStockId, requestQuantity);
 
         // then
-        TicketStock result = ticketStockRepository.findById(ticketStock.getId())
-                .orElseThrow();
+        assertThat(ticketStock.getRemainingQuantity()).isEqualTo(resultRemainingQuantity);
+        verify(ticketStockRepository).findByIdWithPessimisticLock(ticketStockId);
+    }
 
-        assertThat(result.getRemainingQuantity()).isEqualTo(0);
+    @DisplayName("재고 차감 실패 - 재고가 부족한 경우 예외 발생")
+    @Test
+    void decrease_fail_when_insufficient_stock() {
+        // given
+        Long ticketStockId = 1L;
+        int requestQuantity = 1;
+        int remainingQuantity = 0;
+        int resultRemainingQuantity = 0;
+
+        TicketStock ticketStock = TicketStock.builder()
+                .totalQuantity(100)
+                .remainingQuantity(remainingQuantity)
+                .build();
+
+        given(ticketStockRepository.findByIdWithPessimisticLock(ticketStockId))
+                .willReturn(Optional.of(ticketStock));
+
+        // when & then
+        assertThatThrownBy(() -> ticketStockService.decrease(ticketStockId, requestQuantity))
+                .isInstanceOf(InsufficientTicketStockException.class);
+
+        // 재고는 변경되지 않아야 함
+        assertThat(ticketStock.getRemainingQuantity()).isEqualTo(resultRemainingQuantity);
+        verify(ticketStockRepository).findByIdWithPessimisticLock(ticketStockId);
+    }
+
+    @DisplayName("재고 차감 실패 - 존재하지 않는 티켓 재고인 경우 예외 발생")
+    @Test
+    void decrease_fail_when_ticket_stock_not_found() {
+        // given
+        Long nonExistentTicketStockId = 999L;
+        int requestQuantity = 1;
+
+        given(ticketStockRepository.findByIdWithPessimisticLock(nonExistentTicketStockId))
+                .willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> ticketStockService.decrease(nonExistentTicketStockId, requestQuantity))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(ticketStockRepository).findByIdWithPessimisticLock(nonExistentTicketStockId);
     }
 }
