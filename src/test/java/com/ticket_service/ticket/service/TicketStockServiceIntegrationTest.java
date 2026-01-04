@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
 @SpringBootTest
-class TicketStockServiceConcurrencyTest {
+class TicketStockServiceIntegrationTest {
 
     @Autowired
     private TicketStockService ticketStockService;
