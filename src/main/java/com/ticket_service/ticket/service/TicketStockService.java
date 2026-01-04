@@ -12,8 +12,8 @@ public class TicketStockService {
     private final TicketStockRepository ticketStockRepository;
 
     @Transactional
-    public synchronized void decrease(Long ticketStockId, int requestQuantity) {
-        TicketStock ticketStock = ticketStockRepository.findById(ticketStockId)
+    public void decrease(Long ticketStockId, int requestQuantity) {
+        TicketStock ticketStock = ticketStockRepository.findByIdWithPessimisticLock(ticketStockId)
                 .orElseThrow(() -> new IllegalArgumentException("TicketStock not found"));
 
         ticketStock.decreaseQuantity(requestQuantity);
