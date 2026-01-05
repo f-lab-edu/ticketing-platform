@@ -1,3 +1,9 @@
 spring:
   application:
     name: ticket-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus

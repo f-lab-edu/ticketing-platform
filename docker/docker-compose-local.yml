@@ -22,5 +22,25 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ticket-service-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - mysql
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ticket-service-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ticket-service-grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
 volumes:
   ticket-service-data:
+  ticket-service-grafana-data:
