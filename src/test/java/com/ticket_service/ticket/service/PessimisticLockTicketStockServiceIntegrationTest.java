@@ -19,10 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
 @SpringBootTest
-class TicketStockServiceIntegrationTest {
+class PessimisticLockTicketStockServiceIntegrationTest {
 
     @Autowired
-    private TicketStockService ticketStockService;
+    private PessimisticLockTicketStockService pessimisticLockTicketStockService;
 
     @Autowired
     private TicketStockRepository ticketStockRepository;
@@ -94,7 +94,7 @@ class TicketStockServiceIntegrationTest {
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    ticketStockService.decrease(ticketStockId, requestQuantityPerThread);
+                    pessimisticLockTicketStockService.decrease(ticketStockId, requestQuantityPerThread);
                     successCount.incrementAndGet();
                 } catch (InsufficientTicketStockException e) {
                     failCount.incrementAndGet();
@@ -137,7 +137,7 @@ class TicketStockServiceIntegrationTest {
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    ticketStockService.decrease(ticketStockId, requestQuantityPerThread);
+                    pessimisticLockTicketStockService.decrease(ticketStockId, requestQuantityPerThread);
                 } finally {
                     latch.countDown();
                 }

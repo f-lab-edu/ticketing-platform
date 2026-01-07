@@ -18,12 +18,12 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class TicketStockServiceTest {
+class PessimisticLockTicketStockServiceTest {
     @Mock
     private TicketStockRepository ticketStockRepository;
 
     @InjectMocks
-    private TicketStockService ticketStockService;
+    private PessimisticLockTicketStockService pessimisticLockTicketStockService;
 
     @DisplayName("재고 차감 성공 - 재고가 충분한 경우")
     @Test
@@ -43,7 +43,7 @@ class TicketStockServiceTest {
                 .willReturn(Optional.of(ticketStock));
 
         // when
-        ticketStockService.decrease(ticketStockId, requestQuantity);
+        pessimisticLockTicketStockService.decrease(ticketStockId, requestQuantity);
 
         // then
         assertThat(ticketStock.getRemainingQuantity()).isEqualTo(resultRemainingQuantity);
@@ -68,7 +68,7 @@ class TicketStockServiceTest {
                 .willReturn(Optional.of(ticketStock));
 
         // when & then
-        assertThatThrownBy(() -> ticketStockService.decrease(ticketStockId, requestQuantity))
+        assertThatThrownBy(() -> pessimisticLockTicketStockService.decrease(ticketStockId, requestQuantity))
                 .isInstanceOf(InsufficientTicketStockException.class);
 
         // 재고는 변경되지 않아야 함
@@ -87,7 +87,7 @@ class TicketStockServiceTest {
                 .willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> ticketStockService.decrease(nonExistentTicketStockId, requestQuantity))
+        assertThatThrownBy(() -> pessimisticLockTicketStockService.decrease(nonExistentTicketStockId, requestQuantity))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(ticketStockRepository).findByIdWithPessimisticLock(nonExistentTicketStockId);
