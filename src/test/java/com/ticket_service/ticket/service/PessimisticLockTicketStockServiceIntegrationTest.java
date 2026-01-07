@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,9 +31,14 @@ class PessimisticLockTicketStockServiceIntegrationTest {
 
     private static final int threadPoolSize = 32;
 
+    private final Set<Long> createdTicketStockIds = ConcurrentHashMap.newKeySet();
+
     @AfterEach
     void tearDown() {
-        ticketStockRepository.deleteAllInBatch();
+        if (!createdTicketStockIds.isEmpty()) {
+            ticketStockRepository.deleteAllByIdInBatch(createdTicketStockIds);
+            createdTicketStockIds.clear();
+        }
     }
 
     @DisplayName("100개 재고에 100개 요청 - 모두 성공")
@@ -115,12 +122,16 @@ class PessimisticLockTicketStockServiceIntegrationTest {
     }
 
     private TicketStock createTicketStock(int quantity) {
-        return ticketStockRepository.save(
+        TicketStock ticketStock = ticketStockRepository.save(
                 TicketStock.builder()
                         .totalQuantity(quantity)
                         .remainingQuantity(quantity)
                         .build()
         );
+
+        createdTicketStockIds.add(ticketStock.getId());
+
+        return ticketStock;
     }
 
     private TicketStock findTicketStock(Long id) {
