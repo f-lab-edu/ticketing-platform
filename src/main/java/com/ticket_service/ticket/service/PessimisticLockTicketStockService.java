@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@ConditionalOnProperty(name = "ticket.lock.strategy", havingValue = "pessimistic")
+@ConditionalOnProperty(name = "ticket.lock.strategy", havingValue = "pessimistic", matchIfMissing = true)
 @RequiredArgsConstructor
 public class PessimisticLockTicketStockService implements TicketStockService {
     private final TicketStockRepository ticketStockRepository;
