@@ -5,17 +5,17 @@
 ## ========================
 
 local-up:
-	docker compose --env-file ./docker/.env -f ./docker/docker-compose-local.yml up -d
+	docker compose -p ticket-local --env-file ./docker/.env -f ./docker/docker-compose-local.yml up -d
 
 local-down:
-	docker compose --env-file ./docker/.env -f ./docker/docker-compose-local.yml down
+	docker compose -p ticket-local --env-file ./docker/.env -f ./docker/docker-compose-local.yml down
 
 ## ========================
 ## Test DB
 ## ========================
 
 test-up:
-	docker compose --env-file ./docker/.env -f ./docker/docker-compose-test.yml up -d
+	docker compose -p ticket-test --env-file ./docker/.env -f ./docker/docker-compose-test.yml up -d
 
 test-down:
-	docker compose --env-file ./docker/.env -f ./docker/docker-compose-test.yml down
+	docker compose -p ticket-test --env-file ./docker/.env -f ./docker/docker-compose-test.yml down
