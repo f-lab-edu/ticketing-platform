@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,23 +20,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
-@SpringBootTest
-class TicketStockServiceIntegrationTest {
-
+@SpringBootTest(properties = {
+        "ticket.lock.strategy=synchronized"
+})
+class SynchronizedTicketStockServiceIntegrationTest {
     @Autowired
     private TicketStockService ticketStockService;
 
     @Autowired
     private TicketStockRepository ticketStockRepository;
 
-    private static final int threadPoolSize = 32;
+    private static final int THREAD_POOL_SIZE = 32;
+
+    private final Set<Long> createdTicketStockIds = ConcurrentHashMap.newKeySet();
 
     @AfterEach
     void tearDown() {
-        ticketStockRepository.deleteAllInBatch();
+        if (!createdTicketStockIds.isEmpty()) {
+            ticketStockRepository.deleteAllByIdInBatch(createdTicketStockIds);
+            createdTicketStockIds.clear();
+        }
     }
 
-    @DisplayName("100개 재고에 100개 요청 - 모두 성공")
+    @DisplayName("100개 재고에 100개 요청 - 모두 성공 (synchronized)")
     @Test
     void decrease_100_stocks_with_100_requests_all_success() throws Exception {
         // given
@@ -43,18 +51,16 @@ class TicketStockServiceIntegrationTest {
         int requestQuantityPerThread = 1;
 
         TicketStock ticketStock = createTicketStock(initialQuantity);
-        Long ticketStockId = ticketStock.getId();
 
         // when
-        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+        executeConcurrentDecrease(ticketStock.getId(), threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = findTicketStock(ticketStockId);
-
+        TicketStock result = findTicketStock(ticketStock.getId());
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
     }
 
-    @DisplayName("100개 재고에 50명이 각각 2개씩 요청 - 모두 성공")
+    @DisplayName("100개 재고에 50명이 각각 2개씩 요청 - 모두 성공 (synchronized)")
     @Test
     void decrease_100_stocks_with_50_requests_of_2_quantity() throws Exception {
         // given
@@ -87,7 +93,7 @@ class TicketStockServiceIntegrationTest {
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failCount = new AtomicInteger(0);
 
-        ExecutorService executorService = Executors.newFixedThreadPool(threadPoolSize);
+        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
         CountDownLatch latch = new CountDownLatch(threadCount);
 
         // when
@@ -114,37 +120,41 @@ class TicketStockServiceIntegrationTest {
         assertThat(failCount.get()).isEqualTo(50);
     }
 
-    private TicketStock createTicketStock(int quantity) {
-        return ticketStockRepository.save(
-                TicketStock.builder()
-                        .totalQuantity(quantity)
-                        .remainingQuantity(quantity)
-                        .build()
-        );
-    }
-
-    private TicketStock findTicketStock(Long id) {
-        return ticketStockRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("TicketStock not found"));
-    }
-
-    private void executeConcurrentDecrease(Long ticketStockId, int threadCount, int requestQuantityPerThread)
+    private void executeConcurrentDecrease(Long ticketStockId, int threadCount, int requestQuantity)
             throws InterruptedException {
-        ExecutorService executorService = Executors.newFixedThreadPool(threadPoolSize);
+
+        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
         CountDownLatch latch = new CountDownLatch(threadCount);
 
-        // when
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    ticketStockService.decrease(ticketStockId, requestQuantityPerThread);
+                    ticketStockService.decrease(ticketStockId, requestQuantity);
                 } finally {
                     latch.countDown();
                 }
             });
         }
 
-        latch.await(); // 모든 스레드 종료 대기
+        latch.await();
         executorService.shutdown();
+    }
+
+    private TicketStock createTicketStock(int quantity) {
+        TicketStock ticketStock = ticketStockRepository.save(
+                TicketStock.builder()
+                        .totalQuantity(quantity)
+                        .remainingQuantity(quantity)
+                        .build()
+        );
+
+        createdTicketStockIds.add(ticketStock.getId());
+
+        return ticketStock;
+    }
+
+    private TicketStock findTicketStock(Long id) {
+        return ticketStockRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("TicketStock not found"));
     }
 }
