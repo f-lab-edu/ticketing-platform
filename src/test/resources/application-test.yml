@@ -10,6 +10,13 @@ spring:
       hibernate:
 #        format_sql: true
 
+redis:
+  url: redis://localhost:6379
+  timeout: 3
+  lock:
+    wait-time: 5
+    lease-time: 3
+
 logging:
   level:
     org.hibernate.SQL: DEBUG
