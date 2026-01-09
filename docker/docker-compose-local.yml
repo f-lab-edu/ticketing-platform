@@ -22,6 +22,15 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
 
+  redis:
+    image: redis:7.2
+    container_name: ticket-service-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - ticket-service-redis-data:/data
+
   prometheus:
     image: prom/prometheus:latest
     container_name: ticket-service-prometheus
@@ -44,3 +53,4 @@ services:
 volumes:
   ticket-service-data:
   ticket-service-grafana-data:
+  ticket-service-redis-data:
