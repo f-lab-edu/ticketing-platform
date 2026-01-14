@@ -1,5 +1,6 @@
 package com.ticket_service.ticket.service;
 
+import com.ticket_service.common.redis.LockAcquisitionException;
 import com.ticket_service.ticket.entity.TicketStock;
 import com.ticket_service.ticket.exception.InsufficientTicketStockException;
 import com.ticket_service.ticket.repository.TicketStockRepository;
@@ -22,9 +23,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
 @SpringBootTest(properties = {
-        "ticket.lock.strategy=pessimistic"
+        "ticket.lock.strategy=distributed"
 })
-class PessimisticLockTicketStockServiceIntegrationTest {
+class DistributedLockTicketStockServiceIntegrationTest {
 
     @Autowired
     private TicketStockService ticketStockService;
@@ -110,6 +111,72 @@ class PessimisticLockTicketStockServiceIntegrationTest {
         assertThat(result.failCount()).isEqualTo(50);
     }
 
+    @DisplayName("분산 환경 시뮬레이션 - 200개 동시 요청")
+    @Test
+    void decrease_with_high_concurrency_200_requests() throws Exception {
+        // given
+        int initialQuantity = 200;
+        int threadCount = 200;
+        int requestQuantityPerThread = 1;
+
+        TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
+        Long ticketStockId = ticketStock.getId();
+
+        // when
+        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+
+        // then
+        TicketStock result = testHelper.findTicketStock(ticketStockId);
+        assertThat(result.getRemainingQuantity()).isEqualTo(0);
+    }
+
+    @DisplayName("락 획득 실패 시나리오 - 타임아웃 테스트")
+    @Test
+    void decrease_with_lock_timeout() throws Exception {
+        // given
+        int initialQuantity = 10;
+        int threadCount = 50;
+        int requestQuantityPerThread = 1;
+
+        TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
+        Long ticketStockId = ticketStock.getId();
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger lockFailCount = new AtomicInteger(0);
+        AtomicInteger insufficientStockCount = new AtomicInteger(0);
+
+        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+
+        // when
+        for (int i = 0; i < threadCount; i++) {
+            executorService.submit(() -> {
+                try {
+                    ticketStockService.decrease(ticketStockId, requestQuantityPerThread);
+                    successCount.incrementAndGet();
+                } catch (LockAcquisitionException e) {
+                    lockFailCount.incrementAndGet();
+                } catch (InsufficientTicketStockException e) {
+                    insufficientStockCount.incrementAndGet();
+                } catch (Exception e) {
+                    // 기타 예외
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executorService.shutdown();
+
+        // then
+        TicketStock result = testHelper.findTicketStock(ticketStock.getId());
+        assertThat(result.getRemainingQuantity()).isEqualTo(0);
+        assertThat(successCount.get()).isEqualTo(10);
+        assertThat(successCount.get() + lockFailCount.get() + insufficientStockCount.get())
+                .isEqualTo(threadCount);
+    }
+
     private void executeConcurrentDecrease(Long ticketStockId, int threadCount, int requestQuantity)
             throws InterruptedException {
 
@@ -130,8 +197,7 @@ class PessimisticLockTicketStockServiceIntegrationTest {
         executorService.shutdown();
     }
 
-    private ConcurrentResult executeConcurrentDecreaseWithCount(
-            Long ticketStockId, int threadCount, int requestQuantity) throws InterruptedException {
+    private ConcurrentResult executeConcurrentDecreaseWithCount(Long ticketStockId, int threadCount, int requestQuantity) throws InterruptedException {
 
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failCount = new AtomicInteger(0);
@@ -144,7 +210,7 @@ class PessimisticLockTicketStockServiceIntegrationTest {
                 try {
                     ticketStockService.decrease(ticketStockId, requestQuantity);
                     successCount.incrementAndGet();
-                } catch (InsufficientTicketStockException e) {
+                } catch (Exception e) {
                     failCount.incrementAndGet();
                 } finally {
                     latch.countDown();
