@@ -1,0 +1,1 @@
+INSERT INTO ticket.ticket_stock (remaining_quantity, total_quantity, concert_id, version) VALUES (5000, 5000, null, 0)
