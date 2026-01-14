@@ -22,8 +22,8 @@ public class OptimisticLockTicketStockService implements TicketStockService {
     @Override
     @Retryable(
             retryFor = {OptimisticLockException.class, ObjectOptimisticLockingFailureException.class},
-            maxAttempts = 50,
-            backoff = @Backoff(delay = 50)
+            maxAttempts = 5,
+            backoff = @Backoff(delay = 30, multiplier = 2)
     )
     @Transactional
     public void decrease(Long ticketStockId, int requestQuantity) {
