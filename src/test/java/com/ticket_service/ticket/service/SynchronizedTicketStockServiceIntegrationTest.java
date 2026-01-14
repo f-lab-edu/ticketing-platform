@@ -4,6 +4,7 @@ import com.ticket_service.ticket.entity.TicketStock;
 import com.ticket_service.ticket.exception.InsufficientTicketStockException;
 import com.ticket_service.ticket.repository.TicketStockRepository;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,13 @@ class SynchronizedTicketStockServiceIntegrationTest {
 
     private final Set<Long> createdTicketStockIds = ConcurrentHashMap.newKeySet();
 
+    private TicketStockTestHelper testHelper;
+
+    @BeforeEach
+    void setUp() {
+        testHelper = new TicketStockTestHelper(ticketStockRepository, createdTicketStockIds);
+    }
+
     @AfterEach
     void tearDown() {
         if (!createdTicketStockIds.isEmpty()) {
@@ -50,13 +58,14 @@ class SynchronizedTicketStockServiceIntegrationTest {
         int threadCount = 100;
         int requestQuantityPerThread = 1;
 
-        TicketStock ticketStock = createTicketStock(initialQuantity);
+        TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
+        Long ticketStockId = ticketStock.getId();
 
-        // when
-        executeConcurrentDecrease(ticketStock.getId(), threadCount, requestQuantityPerThread);
+        //when
+        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = findTicketStock(ticketStock.getId());
+        TicketStock result = testHelper.findTicketStock(ticketStock.getId());
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
     }
 
@@ -68,14 +77,14 @@ class SynchronizedTicketStockServiceIntegrationTest {
         int threadCount = 50;
         int requestQuantityPerThread = 2;
 
-        TicketStock ticketStock = createTicketStock(initialQuantity);
+        TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
         Long ticketStockId = ticketStock.getId();
 
         // when
         executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = findTicketStock(ticketStockId);
+        TicketStock result = testHelper.findTicketStock(ticketStockId);
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
     }
 
@@ -87,37 +96,17 @@ class SynchronizedTicketStockServiceIntegrationTest {
         int threadCount = 100;
         int requestQuantityPerThread = 1;
 
-        TicketStock ticketStock = createTicketStock(initialQuantity);
+        TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
         Long ticketStockId = ticketStock.getId();
 
-        AtomicInteger successCount = new AtomicInteger(0);
-        AtomicInteger failCount = new AtomicInteger(0);
-
-        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-        CountDownLatch latch = new CountDownLatch(threadCount);
-
         // when
-        for (int i = 0; i < threadCount; i++) {
-            executorService.submit(() -> {
-                try {
-                    ticketStockService.decrease(ticketStockId, requestQuantityPerThread);
-                    successCount.incrementAndGet();
-                } catch (InsufficientTicketStockException e) {
-                    failCount.incrementAndGet();
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        latch.await();
-        executorService.shutdown();
+        ConcurrentResult result = executeConcurrentDecreaseWithCount(ticketStockId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = findTicketStock(ticketStock.getId());
-        assertThat(result.getRemainingQuantity()).isEqualTo(0);
-        assertThat(successCount.get()).isEqualTo(50);
-        assertThat(failCount.get()).isEqualTo(50);
+        TicketStock findStock = testHelper.findTicketStock(ticketStock.getId());
+        assertThat(findStock.getRemainingQuantity()).isEqualTo(0);
+        assertThat(result.successCount).isEqualTo(50);
+        assertThat(result.failCount).isEqualTo(50);
     }
 
     private void executeConcurrentDecrease(Long ticketStockId, int threadCount, int requestQuantity)
@@ -140,21 +129,34 @@ class SynchronizedTicketStockServiceIntegrationTest {
         executorService.shutdown();
     }
 
-    private TicketStock createTicketStock(int quantity) {
-        TicketStock ticketStock = ticketStockRepository.save(
-                TicketStock.builder()
-                        .totalQuantity(quantity)
-                        .remainingQuantity(quantity)
-                        .build()
-        );
+    private ConcurrentResult executeConcurrentDecreaseWithCount(
+            Long ticketStockId, int threadCount, int requestQuantity) throws InterruptedException {
 
-        createdTicketStockIds.add(ticketStock.getId());
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failCount = new AtomicInteger(0);
 
-        return ticketStock;
+        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            executorService.submit(() -> {
+                try {
+                    ticketStockService.decrease(ticketStockId, requestQuantity);
+                    successCount.incrementAndGet();
+                } catch (InsufficientTicketStockException e) {
+                    failCount.incrementAndGet();
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executorService.shutdown();
+
+        return new ConcurrentResult(successCount.get(), failCount.get());
     }
 
-    private TicketStock findTicketStock(Long id) {
-        return ticketStockRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("TicketStock not found"));
-    }
+    private record ConcurrentResult(int successCount, int failCount) {}
+
 }
