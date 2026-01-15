@@ -15,9 +15,9 @@ public class TicketStockController {
     private final TicketStockService ticketStockService;
 
     @PostMapping("/ticket-stocks/{id}")
-    public ApiResponse decrease(@PathVariable Long id, @RequestBody DecreaseRequest request) {
+    public ApiResponse<String> decrease(@PathVariable Long id, @RequestBody DecreaseRequest request) {
         ticketStockService.decrease(id, request.getRequestQuantity());
 
-        return ApiResponse.success();
+        return ApiResponse.ok("success");
     }
 }
