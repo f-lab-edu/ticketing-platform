@@ -18,6 +18,11 @@ redis:
     wait-time: 5
     lease-time: 3
 
+queue:
+  max-processing-count: 100
+  entry-timeout-seconds: 300
+  waiting-timeout-seconds: 1800
+
 logging:
   level:
     org.hibernate.SQL: DEBUG
