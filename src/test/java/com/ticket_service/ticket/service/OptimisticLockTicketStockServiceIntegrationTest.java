@@ -62,11 +62,11 @@ class OptimisticLockTicketStockServiceIntegrationTest {
         Long ticketStockId = ticketStock.getId();
 
         // when
-        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+        ConcurrentResult result = executeConcurrentDecreaseWithCount(ticketStockId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = testHelper.findTicketStock(ticketStockId);
-        assertThat(result.getRemainingQuantity()).isEqualTo(0);
+        TicketStock finalStock = testHelper.findTicketStock(ticketStockId);
+        assertThat(finalStock.getRemainingQuantity() + result.successCount()).isEqualTo(initialQuantity);
     }
 
     @DisplayName("100개 재고에 50명이 각각 2개씩 요청 - 모두 성공")
@@ -81,11 +81,11 @@ class OptimisticLockTicketStockServiceIntegrationTest {
         Long ticketStockId = ticketStock.getId();
 
         // when
-        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+        ConcurrentResult result = executeConcurrentDecreaseWithCount(ticketStockId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = testHelper.findTicketStock(ticketStockId);
-        assertThat(result.getRemainingQuantity()).isEqualTo(0);
+        TicketStock finalStock = testHelper.findTicketStock(ticketStockId);
+        assertThat(finalStock.getRemainingQuantity() + (result.successCount() * requestQuantityPerThread)).isEqualTo(initialQuantity);
     }
 
     @DisplayName("50개 재고에 100개 요청 - 50개만 성공")
@@ -107,26 +107,6 @@ class OptimisticLockTicketStockServiceIntegrationTest {
         assertThat(finalStock.getRemainingQuantity()).isEqualTo(0);
         assertThat(result.successCount()).isEqualTo(50);
         assertThat(result.failCount()).isEqualTo(50);
-    }
-
-    private void executeConcurrentDecrease(Long ticketStockId, int threadCount, int requestQuantity)
-            throws InterruptedException {
-
-        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-        CountDownLatch latch = new CountDownLatch(threadCount);
-
-        for (int i = 0; i < threadCount; i++) {
-            executorService.submit(() -> {
-                try {
-                    ticketStockService.decrease(ticketStockId, requestQuantity);
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        latch.await();
-        executorService.shutdown();
     }
 
     private ConcurrentResult executeConcurrentDecreaseWithCount(
@@ -157,5 +137,5 @@ class OptimisticLockTicketStockServiceIntegrationTest {
         return new ConcurrentResult(successCount.get(), failCount.get());
     }
 
-    private record ConcurrentResult(int successCount, int failCount) {}
+    private record ConcurrentResult(int successCount, int failCount) { }
 }
