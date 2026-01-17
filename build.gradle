@@ -39,6 +39,9 @@ dependencies {
 	implementation 'org.springframework.retry:spring-retry'
 
 	implementation 'org.redisson:redisson-spring-boot-starter:3.52.0'
+
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
 }
 
 tasks.named('test') {
