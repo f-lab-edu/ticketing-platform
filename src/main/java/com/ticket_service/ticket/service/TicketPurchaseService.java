@@ -23,6 +23,9 @@ public class TicketPurchaseService {
         }
     }
 
+    /**
+     * 대기열을 무시하고 직접 API를 호출하는 것을 방지
+     */
     private void validateQueueAccess(Long ticketStockId, String userId) {
         if (!queueService.canEnter(ticketStockId, userId)) {
             throw new QueueAccessDeniedException("대기열 순서가 아닙니다. 대기열 상태를 확인해주세요.");
