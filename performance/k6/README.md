@@ -38,16 +38,75 @@ k6 run ticket-stock.js
 
 ### 테스트 대상 API
 
+#### 1. 직접 API (대기열 없음)
 ```bash
-curl -X POST http://localhost:8080/ticket-stocks/{ticketStockId} \
+curl -X POST http://localhost:8080/ticket-stocks/{ticketStockId}/direct \
   -H "Content-Type: application/json" \
   -d '{
     "requestQuantity": 1
   }'
 ```
 
-- ticketStockId : 차감 대상 티켓 재고 ID 
-- requestQuantity : 차감할 재고 수량
+- 대기열 검증 없이 직접 재고 차감
+- 락 전략(pessimistic/optimistic/distributed)별 성능 비교용
+- 성능 테스트 및 개발 환경에서 사용
+
+#### 2. 대기열 기반 API (프로덕션)
+```bash
+# 대기열 등록
+curl -X POST http://localhost:8080/queues/{ticketStockId}/enter \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user123"
+  }'
+
+# 대기열 상태 조회
+curl -X GET "http://localhost:8080/queues/{ticketStockId}/status?userId=user123"
+
+# 티켓 구매 (입장 가능한 경우)
+curl -X POST http://localhost:8080/ticket-stocks/{ticketStockId} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user123",
+    "requestQuantity": 1
+  }'
+```
+
+## 4. 테스트 시나리오
+
+### 시나리오 1: 직접 API 부하 테스트 (대기열 없음)
+
+단일 인스턴스 기반 락 전략 성능 테스트
+
+```bash
+k6 run ticket-stock-direct.js
+```
+
+**테스트 내용:**
+- 100명의 동시 사용자가 10초간 재고 차감 요청
+- 대기열 검증 없이 직접 `TicketStockService` 호출
+- 락 전략별 처리 시간과 성공률 비교
+
+**사용 사례:**
+- 락 전략(pessimistic/optimistic/distributed) 성능 비교
+- 단일 인스턴스 환경에서의 동시성 제어 검증
+
+### 시나리오 2: 대기열 기반 API 부하 테스트
+
+프로덕션 환경과 동일한 대기열 플로우 테스트
+
+```bash
+k6 run ticket-stock-queue.js
+```
+
+**테스트 내용:**
+- 대기열 등록 → 상태 폴링 → 구매 전체 플로우
+- Redis 대기열 동작 및 성능 검증
+- 입장 가능한 사용자만 구매 진행
+
+**사용 사례:**
+- Redis 대기열 시스템 성능 측정
+- 프로덕션 환경 시뮬레이션
 
 ### 기본 시나리오
 
