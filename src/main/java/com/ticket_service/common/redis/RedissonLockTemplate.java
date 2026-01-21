@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 @Component
 @RequiredArgsConstructor
@@ -31,6 +32,28 @@ public class RedissonLockTemplate {
             }
 
             action.run();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Lock interrupted", e);
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+
+    public <T> T executeWithLock(String key, Supplier<T> action) {
+        RLock lock = redissonClient.getLock(key);
+        boolean locked = false;
+
+        try {
+            locked = lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS);
+
+            if (!locked) {
+                throw new LockAcquisitionException(key);
+            }
+
+            return action.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Lock interrupted", e);
