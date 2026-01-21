@@ -158,7 +158,7 @@ public class RedisQueueService implements QueueService {
     public QueueInfo getQueueInfo(Long ticketStockId, String userId) {
         Long position = getPosition(ticketStockId, userId);
         boolean canEnter = canEnter(ticketStockId, userId);
-        QueueStatus status = determineStatus(position, canEnter);
+        QueueStatus status = QueueStatus.determine(position, canEnter);
 
         return QueueInfo.builder()
                 .userId(userId)
@@ -167,18 +167,5 @@ public class RedisQueueService implements QueueService {
                 .canEnter(canEnter)
                 .status(status)
                 .build();
-    }
-
-    /** 대기열 순번과 입장 가능 여부로 상태 결정 */
-    private QueueStatus determineStatus(Long position, boolean canEnter) {
-        if (position == null && canEnter) {
-            return QueueStatus.PROCESSING;
-        } else if (position == null) {
-            return QueueStatus.NOT_IN_QUEUE;
-        } else if (canEnter) {
-            return QueueStatus.CAN_ENTER;
-        } else {
-            return QueueStatus.WAITING;
-        }
     }
 }
