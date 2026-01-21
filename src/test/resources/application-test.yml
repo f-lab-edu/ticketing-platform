@@ -11,11 +11,17 @@ spring:
 #        format_sql: true
 
 redis:
-  url: redis://localhost:6379
-  timeout: 3
+  host: localhost
+  port: 6380
+  timeout: 3000
   lock:
     wait-time: 5
     lease-time: 3
+
+queue:
+  max-processing-count: 100
+  entry-timeout-seconds: 300
+  waiting-timeout-seconds: 1800
 
 logging:
   level:

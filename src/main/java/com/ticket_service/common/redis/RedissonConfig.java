@@ -11,10 +11,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @RequiredArgsConstructor
 public class RedissonConfig {
-    @Value("${redis.url}")
-    private String redisUrl;
+    @Value("${redis.host}")
+    private String host;
 
-    @Value("${redis.lock.timeout:3000}")
+    @Value("${redis.port}")
+    private int port;
+
+    @Value("${redis.timeout:3000}")
     private int timeout;
 
     @Bean(destroyMethod = "shutdown")
@@ -22,7 +25,7 @@ public class RedissonConfig {
         Config config = new Config();
 
         config.useSingleServer()
-                .setAddress(redisUrl)
+                .setAddress("redis://" + host + ":" + port)
                 .setTimeout(timeout);
 
         return Redisson.create(config);
