@@ -16,16 +16,23 @@ spring:
     init:
       mode: always
       data-locations: classpath:sql/performance-data.sql
+
 redis:
-  url: ${REDIS_URL}
-  timeout: 3
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  timeout: 3000
   lock:
     wait-time: 5
     lease-time: 3
 
+queue:
+  max-processing-count: 100
+  entry-timeout-seconds: 300
+  waiting-timeout-seconds: 1800
+
 ticket:
   lock:
-    strategy: pessimistic
+    strategy: distributed
 
 logging:
   level:
