@@ -13,9 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class PessimisticLockTicketStockService implements TicketStockService {
     private final TicketStockRepository ticketStockRepository;
 
+    @Override
     @Transactional
-    public void decrease(Long ticketStockId, int requestQuantity) {
-        TicketStock ticketStock = ticketStockRepository.findByIdWithPessimisticLock(ticketStockId)
+    public void decreaseByConcertId(Long concertId, int requestQuantity) {
+        TicketStock ticketStock = ticketStockRepository.findByConcertIdWithPessimisticLock(concertId)
                 .orElseThrow(() -> new IllegalArgumentException("TicketStock not found"));
 
         ticketStock.decreaseQuantity(requestQuantity);
