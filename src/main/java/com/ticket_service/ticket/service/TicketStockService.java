@@ -1,5 +1,5 @@
 package com.ticket_service.ticket.service;
 
 public interface TicketStockService {
-    void decrease(Long id, int quantity);
+    void decreaseByConcertId(Long concertId, int requestQuantity);
 }
