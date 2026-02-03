@@ -13,4 +13,10 @@ public interface TicketStockRepository extends JpaRepository<TicketStock, Long> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ts from TicketStock ts where ts.id = :id")
     Optional<TicketStock> findByIdWithPessimisticLock(@Param("id") Long id);
+
+    Optional<TicketStock> findByConcertId(Long concertId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select ts from TicketStock ts where ts.concert.id = :concertId")
+    Optional<TicketStock> findByConcertIdWithPessimisticLock(@Param("concertId") Long concertId);
 }
