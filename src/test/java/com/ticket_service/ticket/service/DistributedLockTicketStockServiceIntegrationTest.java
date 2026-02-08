@@ -1,6 +1,7 @@
 package com.ticket_service.ticket.service;
 
 import com.ticket_service.common.redis.LockAcquisitionException;
+import com.ticket_service.concert.repository.ConcertRepository;
 import com.ticket_service.ticket.entity.TicketStock;
 import com.ticket_service.ticket.exception.InsufficientTicketStockException;
 import com.ticket_service.ticket.repository.TicketStockRepository;
@@ -33,23 +34,24 @@ class DistributedLockTicketStockServiceIntegrationTest {
     @Autowired
     private TicketStockRepository ticketStockRepository;
 
+    @Autowired
+    private ConcertRepository concertRepository;
+
     private static final int THREAD_POOL_SIZE = 32;
 
     private final Set<Long> createdTicketStockIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> createdConcertIds = ConcurrentHashMap.newKeySet();
 
     private TicketStockTestHelper testHelper;
 
     @BeforeEach
     void setUp() {
-        testHelper = new TicketStockTestHelper(ticketStockRepository, createdTicketStockIds);
+        testHelper = new TicketStockTestHelper(ticketStockRepository, concertRepository, createdTicketStockIds, createdConcertIds);
     }
 
     @AfterEach
     void tearDown() {
-        if (!createdTicketStockIds.isEmpty()) {
-            ticketStockRepository.deleteAllByIdInBatch(createdTicketStockIds);
-            createdTicketStockIds.clear();
-        }
+        testHelper.cleanUp();
     }
 
     @DisplayName("100개 재고에 100개 요청 - 모두 성공")
@@ -61,13 +63,13 @@ class DistributedLockTicketStockServiceIntegrationTest {
         int requestQuantityPerThread = 1;
 
         TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-        Long ticketStockId = ticketStock.getId();
+        Long concertId = ticketStock.getConcert().getId();
 
         // when
-        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+        executeConcurrentDecrease(concertId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = testHelper.findTicketStock(ticketStockId);
+        TicketStock result = testHelper.findTicketStockByConcertId(concertId);
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
     }
 
@@ -80,13 +82,13 @@ class DistributedLockTicketStockServiceIntegrationTest {
         int requestQuantityPerThread = 2;
 
         TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-        Long ticketStockId = ticketStock.getId();
+        Long concertId = ticketStock.getConcert().getId();
 
         // when
-        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+        executeConcurrentDecrease(concertId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = testHelper.findTicketStock(ticketStockId);
+        TicketStock result = testHelper.findTicketStockByConcertId(concertId);
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
     }
 
@@ -99,13 +101,13 @@ class DistributedLockTicketStockServiceIntegrationTest {
         int requestQuantityPerThread = 1;
 
         TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-        Long ticketStockId = ticketStock.getId();
+        Long concertId = ticketStock.getConcert().getId();
 
         // when
-        ConcurrentResult result = executeConcurrentDecreaseWithCount(ticketStockId, threadCount, requestQuantityPerThread);
+        ConcurrentResult result = executeConcurrentDecreaseWithCount(concertId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock finalStock = testHelper.findTicketStock(ticketStock.getId());
+        TicketStock finalStock = testHelper.findTicketStockByConcertId(concertId);
         assertThat(finalStock.getRemainingQuantity()).isEqualTo(0);
         assertThat(result.successCount()).isEqualTo(50);
         assertThat(result.failCount()).isEqualTo(50);
@@ -120,13 +122,13 @@ class DistributedLockTicketStockServiceIntegrationTest {
         int requestQuantityPerThread = 1;
 
         TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-        Long ticketStockId = ticketStock.getId();
+        Long concertId = ticketStock.getConcert().getId();
 
         // when
-        executeConcurrentDecrease(ticketStockId, threadCount, requestQuantityPerThread);
+        executeConcurrentDecrease(concertId, threadCount, requestQuantityPerThread);
 
         // then
-        TicketStock result = testHelper.findTicketStock(ticketStockId);
+        TicketStock result = testHelper.findTicketStockByConcertId(concertId);
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
     }
 
@@ -139,7 +141,7 @@ class DistributedLockTicketStockServiceIntegrationTest {
         int requestQuantityPerThread = 1;
 
         TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-        Long ticketStockId = ticketStock.getId();
+        Long concertId = ticketStock.getConcert().getId();
 
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger lockFailCount = new AtomicInteger(0);
@@ -152,7 +154,7 @@ class DistributedLockTicketStockServiceIntegrationTest {
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    ticketStockService.decrease(ticketStockId, requestQuantityPerThread);
+                    ticketStockService.decreaseByConcertId(concertId, requestQuantityPerThread);
                     successCount.incrementAndGet();
                 } catch (LockAcquisitionException e) {
                     lockFailCount.incrementAndGet();
@@ -170,14 +172,14 @@ class DistributedLockTicketStockServiceIntegrationTest {
         executorService.shutdown();
 
         // then
-        TicketStock result = testHelper.findTicketStock(ticketStock.getId());
+        TicketStock result = testHelper.findTicketStockByConcertId(concertId);
         assertThat(result.getRemainingQuantity()).isEqualTo(0);
         assertThat(successCount.get()).isEqualTo(10);
         assertThat(successCount.get() + lockFailCount.get() + insufficientStockCount.get())
                 .isEqualTo(threadCount);
     }
 
-    private void executeConcurrentDecrease(Long ticketStockId, int threadCount, int requestQuantity)
+    private void executeConcurrentDecrease(Long concertId, int threadCount, int requestQuantity)
             throws InterruptedException {
 
         ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
@@ -186,7 +188,7 @@ class DistributedLockTicketStockServiceIntegrationTest {
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    ticketStockService.decrease(ticketStockId, requestQuantity);
+                    ticketStockService.decreaseByConcertId(concertId, requestQuantity);
                 } finally {
                     latch.countDown();
                 }
@@ -197,7 +199,7 @@ class DistributedLockTicketStockServiceIntegrationTest {
         executorService.shutdown();
     }
 
-    private ConcurrentResult executeConcurrentDecreaseWithCount(Long ticketStockId, int threadCount, int requestQuantity) throws InterruptedException {
+    private ConcurrentResult executeConcurrentDecreaseWithCount(Long concertId, int threadCount, int requestQuantity) throws InterruptedException {
 
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failCount = new AtomicInteger(0);
@@ -208,7 +210,7 @@ class DistributedLockTicketStockServiceIntegrationTest {
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    ticketStockService.decrease(ticketStockId, requestQuantity);
+                    ticketStockService.decreaseByConcertId(concertId, requestQuantity);
                     successCount.incrementAndGet();
                 } catch (Exception e) {
                     failCount.incrementAndGet();

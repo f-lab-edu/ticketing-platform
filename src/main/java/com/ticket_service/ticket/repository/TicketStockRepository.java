@@ -10,7 +10,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface TicketStockRepository extends JpaRepository<TicketStock, Long> {
+    Optional<TicketStock> findByConcertId(Long concertId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select ts from TicketStock ts where ts.id = :id")
-    Optional<TicketStock> findByIdWithPessimisticLock(@Param("id") Long id);
+    @Query("select ts from TicketStock ts where ts.concert.id = :concertId")
+    Optional<TicketStock> findByConcertIdWithPessimisticLock(@Param("concertId") Long concertId);
 }

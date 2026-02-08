@@ -15,10 +15,10 @@ public class DistributedLockTicketStockService implements TicketStockService {
     private final RedissonLockTemplate redissonLockTemplate;
 
     @Override
-    public void decrease(Long ticketStockId, int requestQuantity) {
+    public void decreaseByConcertId(Long concertId, int requestQuantity) {
         redissonLockTemplate.executeWithLock(
-                LockKey.ticketStock(ticketStockId),
-                () -> ticketStockTransactionalService.decrease(ticketStockId, requestQuantity)
+                LockKey.ticketStock(concertId),
+                () -> ticketStockTransactionalService.decreaseByConcertId(concertId, requestQuantity)
         );
     }
 }

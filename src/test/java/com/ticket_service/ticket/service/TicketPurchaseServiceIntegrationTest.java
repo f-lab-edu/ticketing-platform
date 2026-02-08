@@ -1,12 +1,17 @@
 package com.ticket_service.ticket.service;
 
 import com.ticket_service.common.redis.QueueKey;
+import com.ticket_service.concert.repository.ConcertRepository;
 import com.ticket_service.queue.exception.QueueAccessDeniedException;
 import com.ticket_service.queue.service.QueueService;
 import com.ticket_service.ticket.entity.TicketStock;
 import com.ticket_service.ticket.exception.InsufficientTicketStockException;
 import com.ticket_service.ticket.repository.TicketStockRepository;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +42,9 @@ class TicketPurchaseServiceIntegrationTest {
     private TicketStockRepository ticketStockRepository;
 
     @Autowired
+    private ConcertRepository concertRepository;
+
+    @Autowired
     private RedisTemplate<String, String> queueRedisTemplate;
 
     @Value("${queue.max-processing-count}")
@@ -45,29 +53,27 @@ class TicketPurchaseServiceIntegrationTest {
     private static final int THREAD_POOL_SIZE = 32;
 
     private final Set<Long> createdTicketStockIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> createdConcertIds = ConcurrentHashMap.newKeySet();
     private TicketStockTestHelper testHelper;
 
     @BeforeEach
     void setUp() {
-        testHelper = new TicketStockTestHelper(ticketStockRepository, createdTicketStockIds);
+        testHelper = new TicketStockTestHelper(ticketStockRepository, concertRepository, createdTicketStockIds, createdConcertIds);
     }
 
     @AfterEach
     void tearDown() {
-        // Redis 대기열 정리
-        for (Long ticketStockId : createdTicketStockIds) {
-            clearQueue(ticketStockId);
+        // Redis 정리 - 생성된 Concert ID들로 큐 정리
+        for (Long concertId : createdConcertIds) {
+            clearQueue(concertId);
         }
         // DB 정리
-        if (!createdTicketStockIds.isEmpty()) {
-            ticketStockRepository.deleteAllByIdInBatch(createdTicketStockIds);
-            createdTicketStockIds.clear();
-        }
+        testHelper.cleanUp();
     }
 
-    private void clearQueue(Long ticketStockId) {
-        String waitingKey = QueueKey.waitingQueue(ticketStockId);
-        String processingKey = QueueKey.processingQueue(ticketStockId);
+    private void clearQueue(Long concertId) {
+        String waitingKey = QueueKey.waitingQueue(concertId);
+        String processingKey = QueueKey.processingSet(concertId);
         queueRedisTemplate.delete(waitingKey);
         queueRedisTemplate.delete(processingKey);
     }
@@ -76,26 +82,27 @@ class TicketPurchaseServiceIntegrationTest {
     @DisplayName("구매 플로우 테스트")
     class PurchaseFlowTest {
 
-        @DisplayName("대기열 등록 → 구매 성공 → 재고 감소 및 처리열에서 제거")
+        @DisplayName("대기열 등록 → 입장 → 구매 성공 → 재고 감소 및 처리열에서 제거")
         @Test
         void purchase_success_flow() {
             // given
             TicketStock ticketStock = testHelper.createTicketStock(100);
-            Long ticketStockId = ticketStock.getId();
+            Long concertId = ticketStock.getConcert().getId();
             String userId = "user-1";
 
-            // 대기열 등록
-            queueService.enqueue(ticketStockId, userId);
+            // 대기열 등록 + 입장
+            queueService.enterWaitingQueue(concertId, userId);
+            queueService.permitProcessing(concertId);
 
             // when
-            ticketPurchaseService.purchase(ticketStockId, userId, 1);
+            ticketPurchaseService.purchase(concertId, userId, 1);
 
             // then - 재고 감소 확인
-            TicketStock result = testHelper.findTicketStock(ticketStockId);
+            TicketStock result = testHelper.findTicketStockByConcertId(concertId);
             assertThat(result.getRemainingQuantity()).isEqualTo(99);
 
             // then - 처리열에서 제거 확인
-            String processingKey = QueueKey.processingQueue(ticketStockId);
+            String processingKey = QueueKey.processingSet(concertId);
             Boolean isInProcessing = queueRedisTemplate.opsForSet().isMember(processingKey, userId);
             assertThat(isInProcessing).isFalse();
         }
@@ -105,17 +112,17 @@ class TicketPurchaseServiceIntegrationTest {
         void purchase_without_queue_throws_exception() {
             // given
             TicketStock ticketStock = testHelper.createTicketStock(100);
-            Long ticketStockId = ticketStock.getId();
+            Long concertId = ticketStock.getConcert().getId();
             String userId = "user-1";
 
             // 대기열 등록하지 않음
 
             // when & then
-            assertThatThrownBy(() -> ticketPurchaseService.purchase(ticketStockId, userId, 1))
+            assertThatThrownBy(() -> ticketPurchaseService.purchase(concertId, userId, 1))
                     .isInstanceOf(QueueAccessDeniedException.class);
 
             // 재고는 그대로
-            TicketStock result = testHelper.findTicketStock(ticketStockId);
+            TicketStock result = testHelper.findTicketStockByConcertId(concertId);
             assertThat(result.getRemainingQuantity()).isEqualTo(100);
         }
 
@@ -124,17 +131,18 @@ class TicketPurchaseServiceIntegrationTest {
         void purchase_fail_still_removes_from_processing() {
             // given
             TicketStock ticketStock = testHelper.createTicketStock(1);
-            Long ticketStockId = ticketStock.getId();
+            Long concertId = ticketStock.getConcert().getId();
             String userId = "user-1";
 
-            queueService.enqueue(ticketStockId, userId);
+            queueService.enterWaitingQueue(concertId, userId);
+            queueService.permitProcessing(concertId);
 
             // when - 재고보다 많이 요청
-            assertThatThrownBy(() -> ticketPurchaseService.purchase(ticketStockId, userId, 10))
+            assertThatThrownBy(() -> ticketPurchaseService.purchase(concertId, userId, 10))
                     .isInstanceOf(InsufficientTicketStockException.class);
 
             // then - 처리열에서 제거 확인 (finally 블록 동작 검증)
-            String processingKey = QueueKey.processingQueue(ticketStockId);
+            String processingKey = QueueKey.processingSet(concertId);
             Boolean isInProcessing = queueRedisTemplate.opsForSet().isMember(processingKey, userId);
             assertThat(isInProcessing).isFalse();
         }
@@ -152,12 +160,13 @@ class TicketPurchaseServiceIntegrationTest {
             int threadCount = 100;
 
             TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-            Long ticketStockId = ticketStock.getId();
+            Long concertId = ticketStock.getConcert().getId();
 
-            // 100명 대기열 등록
+            // 100명 대기열 등록 + 입장
             for (int i = 0; i < threadCount; i++) {
-                queueService.enqueue(ticketStockId, "user-" + i);
+                queueService.enterWaitingQueue(concertId, "user-" + i);
             }
+            queueService.permitProcessing(concertId);
 
             AtomicInteger successCount = new AtomicInteger(0);
             AtomicInteger failCount = new AtomicInteger(0);
@@ -170,7 +179,7 @@ class TicketPurchaseServiceIntegrationTest {
                 final String userId = "user-" + i;
                 executorService.submit(() -> {
                     try {
-                        ticketPurchaseService.purchase(ticketStockId, userId, 1);
+                        ticketPurchaseService.purchase(concertId, userId, 1);
                         successCount.incrementAndGet();
                     } catch (Exception e) {
                         failCount.incrementAndGet();
@@ -184,13 +193,13 @@ class TicketPurchaseServiceIntegrationTest {
             executorService.shutdown();
 
             // then
-            TicketStock result = testHelper.findTicketStock(ticketStockId);
+            TicketStock result = testHelper.findTicketStockByConcertId(concertId);
             assertThat(result.getRemainingQuantity()).isEqualTo(0);
             assertThat(successCount.get()).isEqualTo(threadCount);
             assertThat(failCount.get()).isEqualTo(0);
 
             // 처리열이 비어있는지 확인
-            String processingKey = QueueKey.processingQueue(ticketStockId);
+            String processingKey = QueueKey.processingSet(concertId);
             Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
             assertThat(processingCount).isEqualTo(0);
         }
@@ -203,12 +212,13 @@ class TicketPurchaseServiceIntegrationTest {
             int threadCount = 100;
 
             TicketStock ticketStock = testHelper.createTicketStock(initialQuantity);
-            Long ticketStockId = ticketStock.getId();
+            Long concertId = ticketStock.getConcert().getId();
 
-            // 100명 대기열 등록
+            // 100명 대기열 등록 + 입장
             for (int i = 0; i < threadCount; i++) {
-                queueService.enqueue(ticketStockId, "user-" + i);
+                queueService.enterWaitingQueue(concertId, "user-" + i);
             }
+            queueService.permitProcessing(concertId);
 
             AtomicInteger successCount = new AtomicInteger(0);
             AtomicInteger insufficientStockCount = new AtomicInteger(0);
@@ -221,7 +231,7 @@ class TicketPurchaseServiceIntegrationTest {
                 final String userId = "user-" + i;
                 executorService.submit(() -> {
                     try {
-                        ticketPurchaseService.purchase(ticketStockId, userId, 1);
+                        ticketPurchaseService.purchase(concertId, userId, 1);
                         successCount.incrementAndGet();
                     } catch (InsufficientTicketStockException e) {
                         insufficientStockCount.incrementAndGet();
@@ -237,13 +247,13 @@ class TicketPurchaseServiceIntegrationTest {
             executorService.shutdown();
 
             // then
-            TicketStock result = testHelper.findTicketStock(ticketStockId);
+            TicketStock result = testHelper.findTicketStockByConcertId(concertId);
             assertThat(result.getRemainingQuantity()).isEqualTo(0);
             assertThat(successCount.get()).isEqualTo(initialQuantity);
             assertThat(insufficientStockCount.get()).isEqualTo(threadCount - initialQuantity);
 
             // 처리열이 비어있는지 확인
-            String processingKey = QueueKey.processingQueue(ticketStockId);
+            String processingKey = QueueKey.processingSet(concertId);
             Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
             assertThat(processingCount).isEqualTo(0);
         }
@@ -253,30 +263,29 @@ class TicketPurchaseServiceIntegrationTest {
     @DisplayName("대기열 검증 테스트")
     class QueueValidationTest {
 
-        @DisplayName("처리열이 가득 찬 상태에서 대기 중인 사용자는 구매 불가")
+        @DisplayName("처리열에 없는 대기 중인 사용자는 구매 불가")
         @Test
-        void cannot_purchase_when_processing_full() {
+        void cannot_purchase_when_not_in_processing() {
             // given
             TicketStock ticketStock = testHelper.createTicketStock(200);
-            Long ticketStockId = ticketStock.getId();
+            Long concertId = ticketStock.getConcert().getId();
 
-            // maxProcessingCount 명을 처리열에 추가 (enter만 하고 complete 안 함)
+            // maxProcessingCount 명을 처리열에 추가
             for (int i = 0; i < maxProcessingCount; i++) {
-                String userId = "processing-" + i;
-                queueService.enqueue(ticketStockId, userId);
-                queueService.enter(ticketStockId, userId);
+                queueService.enterWaitingQueue(concertId, "processing-" + i);
             }
+            queueService.permitProcessing(concertId);
 
-            // 새로운 사용자 대기열에 등록
+            // 새로운 사용자 대기열에 등록 (처리열에는 들어가지 못함)
             String newUserId = "waiting-user";
-            queueService.enqueue(ticketStockId, newUserId);
+            queueService.enterWaitingQueue(concertId, newUserId);
 
             // when & then - 대기 중인 사용자는 구매 불가
-            assertThatThrownBy(() -> ticketPurchaseService.purchase(ticketStockId, newUserId, 1))
+            assertThatThrownBy(() -> ticketPurchaseService.purchase(concertId, newUserId, 1))
                     .isInstanceOf(QueueAccessDeniedException.class);
 
             // 재고는 그대로
-            TicketStock result = testHelper.findTicketStock(ticketStockId);
+            TicketStock result = testHelper.findTicketStockByConcertId(concertId);
             assertThat(result.getRemainingQuantity()).isEqualTo(200);
         }
     }

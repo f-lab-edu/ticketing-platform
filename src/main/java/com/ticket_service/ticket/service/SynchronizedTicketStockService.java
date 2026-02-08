@@ -12,7 +12,7 @@ public class SynchronizedTicketStockService implements TicketStockService {
     private final TicketStockTransactionalService ticketStockTransactionalService;
 
     @Override
-    public synchronized void decrease(Long id, int quantity) {
-        ticketStockTransactionalService.decrease(id, quantity);
+    public synchronized void decreaseByConcertId(Long concertId, int requestQuantity) {
+        ticketStockTransactionalService.decreaseByConcertId(concertId, requestQuantity);
     }
 }
