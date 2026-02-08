@@ -29,7 +29,7 @@ class PessimisticLockTicketStockServiceTest {
     @Test
     void decrease_success_when_sufficient_stock() {
         // given
-        Long ticketStockId = 1L;
+        Long concertId = 1L;
         int requestQuantity = 5;
         int initialQuantity = 100;
         int resultRemainingQuantity = 95;
@@ -39,22 +39,22 @@ class PessimisticLockTicketStockServiceTest {
                 .remainingQuantity(initialQuantity)
                 .build();
 
-        given(ticketStockRepository.findByIdWithPessimisticLock(ticketStockId))
+        given(ticketStockRepository.findByConcertIdWithPessimisticLock(concertId))
                 .willReturn(Optional.of(ticketStock));
 
         // when
-        pessimisticLockTicketStockService.decrease(ticketStockId, requestQuantity);
+        pessimisticLockTicketStockService.decreaseByConcertId(concertId, requestQuantity);
 
         // then
         assertThat(ticketStock.getRemainingQuantity()).isEqualTo(resultRemainingQuantity);
-        verify(ticketStockRepository).findByIdWithPessimisticLock(ticketStockId);
+        verify(ticketStockRepository).findByConcertIdWithPessimisticLock(concertId);
     }
 
     @DisplayName("재고 차감 실패 - 재고가 부족한 경우 예외 발생")
     @Test
     void decrease_fail_when_insufficient_stock() {
         // given
-        Long ticketStockId = 1L;
+        Long concertId = 1L;
         int requestQuantity = 1;
         int remainingQuantity = 0;
         int resultRemainingQuantity = 0;
@@ -64,32 +64,32 @@ class PessimisticLockTicketStockServiceTest {
                 .remainingQuantity(remainingQuantity)
                 .build();
 
-        given(ticketStockRepository.findByIdWithPessimisticLock(ticketStockId))
+        given(ticketStockRepository.findByConcertIdWithPessimisticLock(concertId))
                 .willReturn(Optional.of(ticketStock));
 
         // when & then
-        assertThatThrownBy(() -> pessimisticLockTicketStockService.decrease(ticketStockId, requestQuantity))
+        assertThatThrownBy(() -> pessimisticLockTicketStockService.decreaseByConcertId(concertId, requestQuantity))
                 .isInstanceOf(InsufficientTicketStockException.class);
 
         // 재고는 변경되지 않아야 함
         assertThat(ticketStock.getRemainingQuantity()).isEqualTo(resultRemainingQuantity);
-        verify(ticketStockRepository).findByIdWithPessimisticLock(ticketStockId);
+        verify(ticketStockRepository).findByConcertIdWithPessimisticLock(concertId);
     }
 
     @DisplayName("재고 차감 실패 - 존재하지 않는 티켓 재고인 경우 예외 발생")
     @Test
     void decrease_fail_when_ticket_stock_not_found() {
         // given
-        Long nonExistentTicketStockId = 999L;
+        Long nonExistentConcertId = 999L;
         int requestQuantity = 1;
 
-        given(ticketStockRepository.findByIdWithPessimisticLock(nonExistentTicketStockId))
+        given(ticketStockRepository.findByConcertIdWithPessimisticLock(nonExistentConcertId))
                 .willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> pessimisticLockTicketStockService.decrease(nonExistentTicketStockId, requestQuantity))
+        assertThatThrownBy(() -> pessimisticLockTicketStockService.decreaseByConcertId(nonExistentConcertId, requestQuantity))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(ticketStockRepository).findByIdWithPessimisticLock(nonExistentTicketStockId);
+        verify(ticketStockRepository).findByConcertIdWithPessimisticLock(nonExistentConcertId);
     }
 }
