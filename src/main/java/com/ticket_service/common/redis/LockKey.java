@@ -8,8 +8,8 @@ public class LockKey {
     // 대기열 → 처리열 일괄 입장 시 사용하는 분산락
     private static final String QUEUE_ENTER_LOCK_PREFIX = "LOCK:QUEUE:ENTER:";
 
-    public static String ticketStock(Long id) {
-        return TICKET_STOCK_LOCK_PREFIX + id;
+    public static String ticketStock(Long concertId) {
+        return TICKET_STOCK_LOCK_PREFIX + concertId;
     }
 
     public static String queueUser(Long concertId, String userId) {

@@ -26,20 +26,20 @@ public class OptimisticLockTicketStockService implements TicketStockService {
             backoff = @Backoff(delay = 30, multiplier = 2)
     )
     @Transactional
-    public void decrease(Long ticketStockId, int requestQuantity) {
-        TicketStock ticketStock = ticketStockRepository.findById(ticketStockId)
+    public void decreaseByConcertId(Long concertId, int requestQuantity) {
+        TicketStock ticketStock = ticketStockRepository.findByConcertId(concertId)
                 .orElseThrow(() -> new IllegalArgumentException("TicketStock not found"));
 
         ticketStock.decreaseQuantity(requestQuantity);
     }
 
     @Recover
-    public void recover(OptimisticLockException e, Long ticketStockId, int requestQuantity) {
-        throw new IllegalStateException("최대 재시도 횟수를 초과했습니다. ticketStockId: " + ticketStockId);
+    public void recover(OptimisticLockException e, Long concertId, int requestQuantity) {
+        throw new IllegalStateException("최대 재시도 횟수를 초과했습니다. concertId: " + concertId);
     }
 
     @Recover
-    public void recover(ObjectOptimisticLockingFailureException e, Long ticketStockId, int requestQuantity) {
-        throw new IllegalStateException("최대 재시도 횟수를 초과했습니다. ticketStockId: " + ticketStockId);
+    public void recover(ObjectOptimisticLockingFailureException e, Long concertId, int requestQuantity) {
+        throw new IllegalStateException("최대 재시도 횟수를 초과했습니다. concertId: " + concertId);
     }
 }
