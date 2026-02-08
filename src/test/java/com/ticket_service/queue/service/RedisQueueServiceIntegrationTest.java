@@ -1,10 +1,12 @@
 package com.ticket_service.queue.service;
 
 import com.ticket_service.common.redis.QueueKey;
-import com.ticket_service.queue.domain.QueueInfo;
-import com.ticket_service.queue.domain.QueueStatus;
 import com.ticket_service.queue.exception.AlreadyInQueueException;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,7 +34,7 @@ class RedisQueueServiceIntegrationTest {
     @Autowired
     private RedisTemplate<String, String> queueRedisTemplate;
 
-    private static final Long TICKET_STOCK_ID = 1L;
+    private static final Long CONCERT_ID = 1L;
     private static final int THREAD_POOL_SIZE = 32;
 
     @Value("${queue.max-processing-count}")
@@ -49,8 +51,8 @@ class RedisQueueServiceIntegrationTest {
     }
 
     private void clearQueue() {
-        String waitingKey = QueueKey.waitingQueue(TICKET_STOCK_ID);
-        String processingKey = QueueKey.processingQueue(TICKET_STOCK_ID);
+        String waitingKey = QueueKey.waitingQueue(CONCERT_ID);
+        String processingKey = QueueKey.processingSet(CONCERT_ID);
         queueRedisTemplate.delete(waitingKey);
         queueRedisTemplate.delete(processingKey);
     }
@@ -76,7 +78,7 @@ class RedisQueueServiceIntegrationTest {
             for (int i = 0; i < threadCount; i++) {
                 executorService.submit(() -> {
                     try {
-                        queueService.enqueue(TICKET_STOCK_ID, userId);
+                        queueService.enterWaitingQueue(CONCERT_ID, userId);
                         successCount.incrementAndGet();
                     } catch (AlreadyInQueueException e) {
                         failCount.incrementAndGet();
@@ -94,7 +96,7 @@ class RedisQueueServiceIntegrationTest {
             assertThat(failCount.get()).isEqualTo(threadCount - 1);
 
             // 대기열에 사용자가 1명만 있는지 확인
-            String waitingKey = QueueKey.waitingQueue(TICKET_STOCK_ID);
+            String waitingKey = QueueKey.waitingQueue(CONCERT_ID);
             Long queueSize = queueRedisTemplate.opsForZSet().size(waitingKey);
             assertThat(queueSize).isEqualTo(1);
         }
@@ -121,7 +123,7 @@ class RedisQueueServiceIntegrationTest {
                 final String userId = "user-" + i;
                 executorService.submit(() -> {
                     try {
-                        Long position = queueService.enqueue(TICKET_STOCK_ID, userId);
+                        Long position = queueService.enterWaitingQueue(CONCERT_ID, userId);
                         positions.add(position);
                         successCount.incrementAndGet();
                     } catch (Exception e) {
@@ -139,7 +141,7 @@ class RedisQueueServiceIntegrationTest {
             assertThat(successCount.get()).isEqualTo(threadCount);
 
             // 대기열에 100명 있는지 확인
-            String waitingKey = QueueKey.waitingQueue(TICKET_STOCK_ID);
+            String waitingKey = QueueKey.waitingQueue(CONCERT_ID);
             Long queueSize = queueRedisTemplate.opsForZSet().size(waitingKey);
             assertThat(queueSize).isEqualTo(threadCount);
 
@@ -151,113 +153,124 @@ class RedisQueueServiceIntegrationTest {
     }
 
     @Nested
-    @DisplayName("동시성 - 처리열 제한")
-    class ProcessingLimitTest {
+    @DisplayName("enterNextUsers - 일괄 입장")
+    class EnterNextUsersTest {
 
-        @DisplayName("200명 등록 후 동시에 enter 시도 - 처리열 크기 확인")
+        @DisplayName("가용 슬롯만큼 대기자를 처리열로 이동")
         @Test
-        void concurrent_enter_processing_count_check() throws InterruptedException {
-            // given
+        void enterNextUsers_moves_users_to_processing() {
+            // given - 200명 대기열에 등록
             int userCount = 200;
-
-            // 먼저 200명 대기열에 등록
             for (int i = 0; i < userCount; i++) {
-                queueService.enqueue(TICKET_STOCK_ID, "user-" + i);
+                queueService.enterWaitingQueue(CONCERT_ID, "user-" + i);
             }
-
-            ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-            CountDownLatch latch = new CountDownLatch(userCount);
-
-            AtomicInteger enterCount = new AtomicInteger(0);
-
-            // when - 모든 사용자가 동시에 canEnter 확인 후 enter 시도
-            for (int i = 0; i < userCount; i++) {
-                final String userId = "user-" + i;
-                executorService.submit(() -> {
-                    try {
-                        if (queueService.canEnter(TICKET_STOCK_ID, userId)) {
-                            queueService.enter(TICKET_STOCK_ID, userId);
-                            enterCount.incrementAndGet();
-                        }
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-            }
-
-            latch.await();
-            executorService.shutdown();
-
-            // then
-            String processingKey = QueueKey.processingQueue(TICKET_STOCK_ID);
-            Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
-
-            // 처리열 크기가 maxProcessingCount를 크게 초과하지 않아야 함
-            // (약간의 초과는 canEnter race condition으로 허용)
-            assertThat(processingCount).isGreaterThanOrEqualTo(maxProcessingCount);
-            assertThat(enterCount.get()).isEqualTo(processingCount.intValue());
-        }
-
-        @DisplayName("처리열이 가득 찬 상태에서 새 사용자는 입장 불가")
-        @Test
-        void cannot_enter_when_processing_full() throws InterruptedException {
-            // given - maxProcessingCount 명을 처리열에 추가
-            for (int i = 0; i < maxProcessingCount; i++) {
-                String userId = "processing-user-" + i;
-                queueService.enqueue(TICKET_STOCK_ID, userId);
-                queueService.enter(TICKET_STOCK_ID, userId);
-            }
-
-            // 새로운 사용자 대기열에 등록
-            String newUserId = "new-user";
-            queueService.enqueue(TICKET_STOCK_ID, newUserId);
 
             // when
-            boolean canEnter = queueService.canEnter(TICKET_STOCK_ID, newUserId);
+            List<String> enteredUsers = queueService.permitProcessing(CONCERT_ID);
+
+            // then - maxProcessingCount만큼 입장
+            assertThat(enteredUsers).hasSize(maxProcessingCount);
+
+            String processingKey = QueueKey.processingSet(CONCERT_ID);
+            Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
+            assertThat(processingCount).isEqualTo(maxProcessingCount);
+
+            // 대기열에 나머지 남아있는지 확인
+            String waitingKey = QueueKey.waitingQueue(CONCERT_ID);
+            Long waitingCount = queueRedisTemplate.opsForZSet().size(waitingKey);
+            assertThat(waitingCount).isEqualTo(userCount - maxProcessingCount);
+        }
+
+        @DisplayName("처리열이 가득 찬 상태에서 enterNextUsers 호출 시 빈 목록 반환")
+        @Test
+        void enterNextUsers_no_slots_returns_empty() {
+            // given - maxProcessingCount만큼 등록 후 입장
+            for (int i = 0; i < maxProcessingCount; i++) {
+                queueService.enterWaitingQueue(CONCERT_ID, "user-" + i);
+            }
+            queueService.permitProcessing(CONCERT_ID);
+
+            // 추가 대기자 등록
+            queueService.enterWaitingQueue(CONCERT_ID, "extra-user");
+
+            // when
+            List<String> enteredUsers = queueService.permitProcessing(CONCERT_ID);
 
             // then
-            assertThat(canEnter).isFalse();
+            assertThat(enteredUsers).isEmpty();
+        }
+
+        @DisplayName("complete 후 enterNextUsers 호출 시 대기자 입장")
+        @Test
+        void enterNextUsers_after_complete() {
+            // given - maxProcessingCount만큼 등록 후 입장
+            for (int i = 0; i < maxProcessingCount; i++) {
+                queueService.enterWaitingQueue(CONCERT_ID, "user-" + i);
+            }
+            queueService.permitProcessing(CONCERT_ID);
+
+            // 추가 대기자 50명 등록
+            List<String> waitingUsers = new ArrayList<>();
+            for (int i = 0; i < 50; i++) {
+                String userId = "waiting-" + i;
+                waitingUsers.add(userId);
+                queueService.enterWaitingQueue(CONCERT_ID, userId);
+            }
+
+            // 처리열의 50명 완료
+            for (int i = 0; i < 50; i++) {
+                queueService.completeProcessing(CONCERT_ID, "user-" + i);
+            }
+
+            // when
+            List<String> enteredUsers = queueService.permitProcessing(CONCERT_ID);
+
+            // then - 50명 입장
+            assertThat(enteredUsers).hasSize(50);
+
+            String processingKey = QueueKey.processingSet(CONCERT_ID);
+            Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
+            assertThat(processingCount).isEqualTo(maxProcessingCount);
         }
     }
 
     @Nested
-    @DisplayName("동시성 - enter 정합성")
-    class EnterConsistencyTest {
+    @DisplayName("isInProcessingQueue 테스트")
+    class IsInProcessingQueueTest {
 
-        @DisplayName("동일 사용자가 동시에 enter 호출 - 처리열에 1번만 추가")
+        @DisplayName("입장시킨 사용자는 처리열에 있음")
         @Test
-        void concurrent_enter_same_user_only_once() throws InterruptedException {
+        void isInProcessingQueue_after_enter() {
             // given
             String userId = "user-1";
-            queueService.enqueue(TICKET_STOCK_ID, userId);
-
-            int threadCount = 10;
-            ExecutorService executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-            CountDownLatch latch = new CountDownLatch(threadCount);
+            queueService.enterWaitingQueue(CONCERT_ID, userId);
+            queueService.permitProcessing(CONCERT_ID);
 
             // when
-            for (int i = 0; i < threadCount; i++) {
-                executorService.submit(() -> {
-                    try {
-                        queueService.enter(TICKET_STOCK_ID, userId);
-                    } finally {
-                        latch.countDown();
-                    }
-                });
+            boolean result = queueService.isInProcessing(CONCERT_ID, userId);
+
+            // then
+            assertThat(result).isTrue();
+        }
+
+        @DisplayName("대기열에만 있는 사용자는 처리열에 없음")
+        @Test
+        void isInProcessingQueue_waiting_user() {
+            // given - 처리열 가득 채우기
+            for (int i = 0; i < maxProcessingCount; i++) {
+                queueService.enterWaitingQueue(CONCERT_ID, "user-" + i);
             }
+            queueService.permitProcessing(CONCERT_ID);
 
-            latch.await();
-            executorService.shutdown();
+            // 대기열에만 있는 사용자
+            String waitingUser = "waiting-user";
+            queueService.enterWaitingQueue(CONCERT_ID, waitingUser);
 
-            // then - 처리열에 1명만 있어야 함 (Set 특성)
-            String processingKey = QueueKey.processingQueue(TICKET_STOCK_ID);
-            Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
-            assertThat(processingCount).isEqualTo(1);
+            // when
+            boolean result = queueService.isInProcessing(CONCERT_ID, waitingUser);
 
-            // 대기열에서는 제거되어야 함
-            String waitingKey = QueueKey.waitingQueue(TICKET_STOCK_ID);
-            Long waitingCount = queueRedisTemplate.opsForZSet().size(waitingKey);
-            assertThat(waitingCount).isEqualTo(0);
+            // then
+            assertThat(result).isFalse();
         }
     }
 
@@ -265,67 +278,26 @@ class RedisQueueServiceIntegrationTest {
     @DisplayName("전체 플로우 테스트")
     class FullFlowTest {
 
-        @DisplayName("등록 → 상태조회 → 입장 → 완료 플로우")
+        @DisplayName("등록 → enterNextUsers → 처리열 확인 → 완료 플로우")
         @Test
         void full_queue_flow() {
             // given
             String userId = "user-1";
 
             // 1. 등록
-            QueueInfo registerInfo = queueService.registerAndGetInfo(TICKET_STOCK_ID, userId);
-            assertThat(registerInfo.getStatus()).isIn(QueueStatus.WAITING, QueueStatus.CAN_ENTER);
-            assertThat(registerInfo.getPosition()).isEqualTo(0L);
+            Long position = queueService.enterWaitingQueue(CONCERT_ID, userId);
+            assertThat(position).isEqualTo(0L);
 
-            // 2. 상태 조회
-            QueueInfo statusInfo = queueService.getQueueInfo(TICKET_STOCK_ID, userId);
-            assertThat(statusInfo.isCanEnter()).isTrue();
-            assertThat(statusInfo.getStatus()).isEqualTo(QueueStatus.CAN_ENTER);
+            // 2. 입장
+            List<String> entered = queueService.permitProcessing(CONCERT_ID);
+            assertThat(entered).contains(userId);
 
-            // 3. 입장
-            queueService.enter(TICKET_STOCK_ID, userId);
-            QueueInfo afterEnterInfo = queueService.getQueueInfo(TICKET_STOCK_ID, userId);
-            assertThat(afterEnterInfo.getStatus()).isEqualTo(QueueStatus.PROCESSING);
+            // 3. 처리열 확인
+            assertThat(queueService.isInProcessing(CONCERT_ID, userId)).isTrue();
 
             // 4. 완료
-            queueService.complete(TICKET_STOCK_ID, userId);
-            QueueInfo afterCompleteInfo = queueService.getQueueInfo(TICKET_STOCK_ID, userId);
-            assertThat(afterCompleteInfo.getStatus()).isEqualTo(QueueStatus.NOT_IN_QUEUE);
-        }
-
-        @DisplayName("50명 처리 완료 후 대기열에서 50명 추가 입장 가능")
-        @Test
-        void after_complete_waiting_users_can_enter() throws InterruptedException {
-            // given - 100명 처리열에 추가
-            List<String> processingUsers = new ArrayList<>();
-            for (int i = 0; i < maxProcessingCount; i++) {
-                String userId = "processing-" + i;
-                processingUsers.add(userId);
-                queueService.enqueue(TICKET_STOCK_ID, userId);
-                queueService.enter(TICKET_STOCK_ID, userId);
-            }
-
-            // 50명 대기열에 추가
-            List<String> waitingUsers = new ArrayList<>();
-            for (int i = 0; i < 50; i++) {
-                String userId = "waiting-" + i;
-                waitingUsers.add(userId);
-                queueService.enqueue(TICKET_STOCK_ID, userId);
-            }
-
-            // 대기열 사용자들은 입장 불가
-            assertThat(waitingUsers)
-                    .allMatch(userId -> !queueService.canEnter(TICKET_STOCK_ID, userId));
-
-            // when - 처리열의 50명 완료
-            for (int i = 0; i < 50; i++) {
-                queueService.complete(TICKET_STOCK_ID, processingUsers.get(i));
-            }
-
-            // then - 대기열의 50명 입장 가능
-            long canEnterCount = waitingUsers.stream()
-                    .filter(userId -> queueService.canEnter(TICKET_STOCK_ID, userId))
-                    .count();
-            assertThat(canEnterCount).isEqualTo(50);
+            queueService.completeProcessing(CONCERT_ID, userId);
+            assertThat(queueService.isInProcessing(CONCERT_ID, userId)).isFalse();
         }
     }
 }
