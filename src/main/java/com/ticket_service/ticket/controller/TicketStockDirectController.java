@@ -1,7 +1,7 @@
 package com.ticket_service.ticket.controller;
 
 import com.ticket_service.common.dto.ApiResponse;
-import com.ticket_service.ticket.controller.dto.DecreaseRequest;
+import com.ticket_service.ticket.controller.dto.PurchaseRequest;
 import com.ticket_service.ticket.service.TicketStockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,9 +19,9 @@ public class TicketStockDirectController {
 
     private final TicketStockService ticketStockService;
 
-    @PostMapping("/ticket-stocks/{id}/direct")
-    public ApiResponse<String> decreaseDirect(@PathVariable Long id, @RequestBody DecreaseRequest request) {
-        ticketStockService.decrease(id, request.getRequestQuantity());
+    @PostMapping("/concerts/{concertId}/purchase/direct")
+    public ApiResponse<String> purchaseDirect(@PathVariable Long concertId, @RequestBody PurchaseRequest request) {
+        ticketStockService.decreaseByConcertId(concertId, request.getRequestQuantity());
         return ApiResponse.ok("success");
     }
 }
