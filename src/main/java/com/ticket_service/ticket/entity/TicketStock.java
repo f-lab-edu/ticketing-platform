@@ -2,7 +2,13 @@ package com.ticket_service.ticket.entity;
 
 import com.ticket_service.concert.entity.Concert;
 import com.ticket_service.ticket.exception.InsufficientTicketStockException;
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
