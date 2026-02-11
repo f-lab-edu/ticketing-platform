@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -18,8 +19,8 @@ public class WaitingQueue {
 
     private final RedisTemplate<String, String> queueRedisTemplate;
 
-    @Value("${queue.waiting-timeout-seconds:1800}")
-    private long waitingTimeoutSeconds;
+    @Value("${queue.waiting-timeout}")
+    private Duration waitingTimeout;
 
     public boolean contains(Long concertId, String userId) {
         String key = QueueKey.waitingQueue(concertId);
@@ -30,7 +31,7 @@ public class WaitingQueue {
         String key = QueueKey.waitingQueue(concertId);
         double score = System.currentTimeMillis();
         queueRedisTemplate.opsForZSet().add(key, userId, score);
-        queueRedisTemplate.expire(key, waitingTimeoutSeconds, TimeUnit.SECONDS);
+        queueRedisTemplate.expire(key, waitingTimeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void remove(Long concertId, String userId) {

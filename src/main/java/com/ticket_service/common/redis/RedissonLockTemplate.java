@@ -6,6 +6,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -15,17 +16,17 @@ public class RedissonLockTemplate {
     private final RedissonClient redissonClient;
 
     @Value("${redis.lock.wait-time}")
-    private long waitTime;
+    private Duration waitTime;
 
     @Value("${redis.lock.lease-time}")
-    private long leaseTime;
+    private Duration leaseTime;
 
     public void executeWithLock(String key, Runnable action) {
         RLock lock = redissonClient.getLock(key);
         boolean locked = false;
 
         try {
-            locked = lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS);
+            locked = lock.tryLock(waitTime.toMillis(), leaseTime.toMillis(), TimeUnit.MILLISECONDS);
 
             if (!locked) {
                 throw new LockAcquisitionException(key);
@@ -47,7 +48,7 @@ public class RedissonLockTemplate {
         boolean locked = false;
 
         try {
-            locked = lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS);
+            locked = lock.tryLock(waitTime.toMillis(), leaseTime.toMillis(), TimeUnit.MILLISECONDS);
 
             if (!locked) {
                 throw new LockAcquisitionException(key);

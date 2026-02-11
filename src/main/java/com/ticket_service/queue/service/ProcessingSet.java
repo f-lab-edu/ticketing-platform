@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -15,8 +16,8 @@ public class ProcessingSet {
 
     private final RedisTemplate<String, String> queueRedisTemplate;
 
-    @Value("${queue.entry-timeout-seconds:300}")
-    private long entryTimeoutSeconds;
+    @Value("${queue.entry-timeout}")
+    private Duration entryTimeout;
 
     @Value("${queue.max-processing-count:100}")
     private int maxProcessingCount;
@@ -29,7 +30,7 @@ public class ProcessingSet {
     public void add(Long concertId, String userId) {
         String key = QueueKey.processingSet(concertId);
         queueRedisTemplate.opsForSet().add(key, userId);
-        queueRedisTemplate.expire(key, entryTimeoutSeconds, TimeUnit.SECONDS);
+        queueRedisTemplate.expire(key, entryTimeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void addAll(Long concertId, List<String> userIds) {
@@ -37,7 +38,7 @@ public class ProcessingSet {
         for (String userId : userIds) {
             queueRedisTemplate.opsForSet().add(key, userId);
         }
-        queueRedisTemplate.expire(key, entryTimeoutSeconds, TimeUnit.SECONDS);
+        queueRedisTemplate.expire(key, entryTimeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void remove(Long concertId, String userId) {
