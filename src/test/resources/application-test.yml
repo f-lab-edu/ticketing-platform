@@ -3,27 +3,10 @@ spring:
     url: jdbc:mysql://localhost:3307/ticket_test
     username: test
     password: test
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    properties:
-      hibernate:
-#        format_sql: true
 
 redis:
   host: localhost
   port: 6380
-  timeout: 3000
-  lock:
-    wait-time: 5
-    lease-time: 3
 
 queue:
-  max-processing-count: 100
-  entry-timeout-seconds: 300
-  waiting-timeout-seconds: 1800
-
-logging:
-  level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+  sse-timeout-milliseconds: 600000

@@ -4,8 +4,6 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
-    hibernate:
-      ddl-auto: create-drop
     properties:
       hibernate:
         format_sql: true
@@ -13,15 +11,6 @@ spring:
 redis:
   host: localhost
   port: 6379
-  timeout: 3000
-  lock:
-    wait-time: 5
-    lease-time: 3
-
-queue:
-  max-processing-count: 100
-  entry-timeout-seconds: 300
-  waiting-timeout-seconds: 1800
 
 logging:
   level:
