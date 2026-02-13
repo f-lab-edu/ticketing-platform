@@ -65,7 +65,8 @@ public class QueueOrchestrationService {
     private void enterNextAndNotify(Long concertId) {
         List<String> enteredUsers = queueService.permitProcessing(concertId);
         for (String enteredUserId : enteredUsers) {
-            sseEmitterService.sendEventAndComplete(concertId, enteredUserId, QueueEventType.ENTER, QueueEnterEvent.processing());
+            sseEmitterService.sendEvent(concertId, enteredUserId, QueueEventType.ENTER, QueueEnterEvent.processing());
+            sseEmitterService.completeEmitter(concertId, enteredUserId);
         }
 
         List<String> waitingUsers = queueService.getWaitingUsers(concertId);
