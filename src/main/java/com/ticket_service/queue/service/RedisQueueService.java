@@ -23,7 +23,7 @@ public class RedisQueueService implements QueueService {
                 () -> {
                     validateUniqueEntry(concertId, userId);
                     waitingQueue.add(concertId, userId);
-                    return waitingQueue.rank(concertId, userId);
+                    return getPosition(concertId, userId);
                 }
         );
     }
