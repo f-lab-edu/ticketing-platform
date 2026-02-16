@@ -8,8 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.List;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -37,7 +35,7 @@ public class QueueOrchestrationService {
 
     /**
      * 구매 완료 시 호출
-     * 처리열에서 제거 → 다음 대기자 입장
+     * 처리열에서 제거 → 다음 대기자 1명 입장
      */
     public void onPurchaseComplete(Long concertId, String userId) {
         queueService.completeProcessing(concertId, userId);
@@ -50,7 +48,7 @@ public class QueueOrchestrationService {
 
     /**
      * 취소 시 호출
-     * 대기열/처리열에서 제거 → SSE 종료 → 다음 대기자 입장
+     * 대기열/처리열에서 제거 → SSE 종료 → 다음 대기자 1명 입장
      */
     public void onCancel(Long concertId, String userId) {
         queueService.removeFromQueue(concertId, userId);
@@ -59,12 +57,12 @@ public class QueueOrchestrationService {
     }
 
     /**
-     * 다음 대기자들을 입장시키고 입장 완료 SSE 이벤트를 전송한다.
+     * 다음 대기자 1명을 입장시키고 입장 완료 SSE 이벤트를 전송한다.
      * 순번 업데이트는 QueuePositionBatchScheduler에서 주기적으로 처리한다.
      */
     private void enterNextAndNotify(Long concertId) {
-        List<String> enteredUsers = queueService.permitProcessing(concertId);
-        for (String enteredUserId : enteredUsers) {
+        String enteredUserId = queueService.permitOneProcessing(concertId);
+        if (enteredUserId != null) {
             sseEmitterService.sendEvent(concertId, enteredUserId, QueueEventType.ENTER, QueueEnterEvent.processing());
             sseEmitterService.completeEmitter(concertId, enteredUserId);
         }
