@@ -60,18 +60,13 @@ public class QueueOrchestrationService {
 
     /**
      * 다음 대기자들을 입장시키고 입장 완료 SSE 이벤트를 전송한다.
-     * 이후 남은 대기자들에게 갱신된 순번을 전송한다.
+     * 순번 업데이트는 QueuePositionBatchScheduler에서 주기적으로 처리한다.
      */
     private void enterNextAndNotify(Long concertId) {
         List<String> enteredUsers = queueService.permitProcessing(concertId);
         for (String enteredUserId : enteredUsers) {
             sseEmitterService.sendEvent(concertId, enteredUserId, QueueEventType.ENTER, QueueEnterEvent.processing());
             sseEmitterService.completeEmitter(concertId, enteredUserId);
-        }
-
-        List<String> waitingUsers = queueService.getWaitingUsers(concertId);
-        for (int i = 0; i < waitingUsers.size(); i++) {
-            sseEmitterService.sendEvent(concertId, waitingUsers.get(i), QueueEventType.QUEUE_POSITION, new QueuePositionEvent(i));
         }
     }
 }

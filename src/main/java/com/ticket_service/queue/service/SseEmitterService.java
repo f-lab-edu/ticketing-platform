@@ -1,13 +1,17 @@
 package com.ticket_service.queue.service;
 
 import com.ticket_service.queue.service.dto.QueueEventType;
+import com.ticket_service.queue.service.dto.QueuePositionEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -59,6 +63,18 @@ public class SseEmitterService {
 
     private String buildKey(Long concertId, String userId) {
         return concertId + ":" + userId;
+    }
+
+    public Set<Long> getActiveConcertIds() {
+        return emitters.keySet().stream()
+                .map(key -> Long.parseLong(key.split(":")[0]))
+                .collect(Collectors.toSet());
+    }
+
+    public void broadcastPositions(Long concertId, List<String> waitingUsers) {
+        for (int i = 0; i < waitingUsers.size(); i++) {
+            sendEvent(concertId, waitingUsers.get(i), QueueEventType.QUEUE_POSITION, new QueuePositionEvent(i));
+        }
     }
 
     private void registerCallbacks(SseEmitter emitter, String key, Long concertId, String userId) {
