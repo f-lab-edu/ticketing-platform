@@ -1,5 +1,6 @@
 package com.ticket_service.queue.service;
 
+import com.ticket_service.queue.service.dto.QueueEnterEvent;
 import com.ticket_service.queue.service.dto.QueueEventType;
 import com.ticket_service.queue.service.dto.QueuePositionEvent;
 import lombok.RequiredArgsConstructor;
@@ -14,19 +15,14 @@ public class QueueOrchestrationService {
 
     private final QueueService queueService;
     private final SseEmitterService sseEmitterService;
-    private final QueueEventPublisher queueEventPublisher;
 
     /**
      * 대기열 등록 + SSE 구독
      * 등록 후 대기 순번 또는 즉시 입장 이벤트를 전송한다.
-     *
-     * 중요: emitter를 먼저 생성한 후 대기열에 추가해야 함.
-     * 그렇지 않으면 다른 스레드에서 enterNextAndNotify 호출 시
-     * emitter가 없어 enter 이벤트를 놓칠 수 있음.
      */
     public SseEmitter registerAndSubscribe(Long concertId, String userId) {
-        SseEmitter emitter = sseEmitterService.createEmitter(concertId, userId);
         Long position = queueService.enterWaitingQueue(concertId, userId);
+        SseEmitter emitter = sseEmitterService.createEmitter(concertId, userId);
 
         if (queueService.hasProcessingCapacity(concertId)) {
             enterNextAndNotify(concertId);
@@ -61,13 +57,14 @@ public class QueueOrchestrationService {
     }
 
     /**
-     * 다음 대기자 1명을 입장시키고 Redis Pub/Sub로 입장 이벤트를 발행한다.
-     * 모든 앱 서버가 이벤트를 수신하고, 해당 유저가 연결된 서버에서 SSE를 전송한다.
+     * 다음 대기자 1명을 입장시키고 입장 완료 SSE 이벤트를 전송한다.
+     * 순번 업데이트는 QueuePositionBatchScheduler에서 주기적으로 처리한다.
      */
     private void enterNextAndNotify(Long concertId) {
         String enteredUserId = queueService.permitOneProcessing(concertId);
         if (enteredUserId != null) {
-            queueEventPublisher.publishEnterEvent(concertId, enteredUserId);
+            sseEmitterService.sendEvent(concertId, enteredUserId, QueueEventType.ENTER, QueueEnterEvent.processing());
+            sseEmitterService.completeEmitter(concertId, enteredUserId);
         }
     }
 }

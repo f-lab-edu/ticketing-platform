@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -54,38 +53,12 @@ public class SseEmitterService {
         });
     }
 
-    /**
-     * 이벤트 전송 후 emitter를 완료 처리한다. (원자적 연산)
-     * Pub/Sub에서 enter 이벤트 수신 시 사용한다.
-     *
-     * @return emitter가 존재하고 전송 성공 시 true
-     */
-    public boolean sendEventAndComplete(Long concertId, String userId, QueueEventType eventType, Object data) {
-        String key = buildKey(concertId, userId);
-        AtomicBoolean sent = new AtomicBoolean(false);
-
-        emitters.computeIfPresent(key, (k, emitter) -> {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name(eventType.getValue())
-                        .data(data));
-                sent.set(true);
-                emitter.complete();
-            } catch (IOException e) {
-                log.warn("SSE 이벤트 전송 실패: concertId={}, userId={}", concertId, userId, e);
-            }
-            return null;
-        });
-
-        return sent.get();
-    }
-
     public void completeEmitter(Long concertId, String userId) {
         String key = buildKey(concertId, userId);
-        emitters.computeIfPresent(key, (k, emitter) -> {
+        SseEmitter emitter = emitters.get(key);
+        if (emitter != null) {
             emitter.complete();
-            return null;
-        });
+        }
     }
 
     private String buildKey(Long concertId, String userId) {
@@ -105,7 +78,10 @@ public class SseEmitterService {
     }
 
     private void registerCallbacks(SseEmitter emitter, String key, Long concertId, String userId) {
-        emitter.onCompletion(() -> emitters.remove(key, emitter));
+        emitter.onCompletion(() -> {
+            emitters.remove(key);
+            log.debug("SSE 연결 정상 종료: key={}", key);
+        });
 
         emitter.onTimeout(() -> {
             emitter.complete();
