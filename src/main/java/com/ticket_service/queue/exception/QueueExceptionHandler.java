@@ -31,4 +31,11 @@ public class QueueExceptionHandler {
         log.debug("Not in queue: {}", e.getMessage());
         return ApiResponse.of(HttpStatus.NOT_FOUND, e.getMessage(), null);
     }
+
+    @ExceptionHandler(QueueFullException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ApiResponse<Void> handleQueueFull(QueueFullException e) {
+        log.warn("Queue full: {}", e.getMessage());
+        return ApiResponse.of(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), null);
+    }
 }

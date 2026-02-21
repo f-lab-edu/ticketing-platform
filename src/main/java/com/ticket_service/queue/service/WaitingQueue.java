@@ -22,9 +22,22 @@ public class WaitingQueue {
     @Value("${queue.waiting-timeout}")
     private Duration waitingTimeout;
 
+    @Value("${queue.max-waiting-count:20000}")
+    private int maxWaitingCount;
+
     public boolean contains(Long concertId, String userId) {
         String key = QueueKey.waitingQueue(concertId);
         return queueRedisTemplate.opsForZSet().score(key, userId) != null;
+    }
+
+    public long size(Long concertId) {
+        String key = QueueKey.waitingQueue(concertId);
+        Long size = queueRedisTemplate.opsForZSet().zCard(key);
+        return size != null ? size : 0L;
+    }
+
+    public boolean hasCapacity(Long concertId) {
+        return size(concertId) < maxWaitingCount;
     }
 
     public void add(Long concertId, String userId) {

@@ -3,6 +3,7 @@ package com.ticket_service.queue.service;
 import com.ticket_service.common.redis.LockKey;
 import com.ticket_service.common.redis.RedissonLockTemplate;
 import com.ticket_service.queue.exception.AlreadyInQueueException;
+import com.ticket_service.queue.exception.QueueFullException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +22,7 @@ public class RedisQueueService implements QueueService {
         return redissonLockTemplate.executeWithLock(
                 LockKey.queueUser(concertId, userId),
                 () -> {
-                    validateUniqueEntry(concertId, userId);
+                    validateEntry(concertId, userId);
                     waitingQueue.add(concertId, userId);
                     return getPosition(concertId, userId);
                 }
@@ -93,12 +94,15 @@ public class RedisQueueService implements QueueService {
         return userId;
     }
 
-    private void validateUniqueEntry(Long concertId, String userId) {
+    private void validateEntry(Long concertId, String userId) {
         if (processingSet.contains(concertId, userId)) {
             throw new AlreadyInQueueException("이미 입장한 사용자입니다.");
         }
         if (waitingQueue.contains(concertId, userId)) {
             throw new AlreadyInQueueException("이미 대기열에 등록된 사용자입니다.");
+        }
+        if (!waitingQueue.hasCapacity(concertId)) {
+            throw new QueueFullException("현재 대기 인원이 많아 접수가 어렵습니다. 잠시 후 다시 시도해주세요.");
         }
     }
 }
