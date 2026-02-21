@@ -21,9 +21,9 @@ public class RedisQueueService implements QueueService {
         return redissonLockTemplate.executeWithLock(
                 LockKey.queueUser(concertId, userId),
                 () -> {
-                    validateNotAlreadyQueued(concertId, userId);
+                    validateUniqueEntry(concertId, userId);
                     waitingQueue.add(concertId, userId);
-                    return waitingQueue.rank(concertId, userId);
+                    return getPosition(concertId, userId);
                 }
         );
     }
@@ -76,7 +76,7 @@ public class RedisQueueService implements QueueService {
         return enteredUsers;
     }
 
-    private void validateNotAlreadyQueued(Long concertId, String userId) {
+    private void validateUniqueEntry(Long concertId, String userId) {
         if (processingSet.contains(concertId, userId)) {
             throw new AlreadyInQueueException("이미 입장한 사용자입니다.");
         }
