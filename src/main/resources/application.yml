@@ -19,7 +19,7 @@ redis:
     lease-time: 3s
 
 queue:
-  max-processing-count: 100
+  max-processing-count: 200
   entry-timeout: 5m
   waiting-timeout: 30m
   sse-timeout: 10m
