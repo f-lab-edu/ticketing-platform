@@ -17,7 +17,7 @@ public class QueuePositionBatchScheduler {
     private final QueueService queueService;
     private final SseEmitterService sseEmitterService;
 
-    @Scheduled(fixedDelayString = "${queue.position-broadcast-interval-ms:5000}")
+    @Scheduled(fixedDelayString = "${queue.position-broadcast-interval:5s}")
     public void broadcastPositions() {
         Set<Long> activeConcertIds = sseEmitterService.getActiveConcertIds();
 
