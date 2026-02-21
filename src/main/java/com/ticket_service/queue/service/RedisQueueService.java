@@ -50,6 +50,11 @@ public class RedisQueueService implements QueueService {
     }
 
     @Override
+    public String permitOneProcessing(Long concertId) {
+        return redissonLockTemplate.executeWithLock(LockKey.queueEnter(concertId), () -> moveOneToProcessing(concertId));
+    }
+
+    @Override
     public boolean hasProcessingCapacity(Long concertId) {
         return processingSet.hasCapacity(concertId);
     }
@@ -74,6 +79,18 @@ public class RedisQueueService implements QueueService {
             processingSet.addAll(concertId, enteredUsers);
         }
         return enteredUsers;
+    }
+
+    private String moveOneToProcessing(Long concertId) {
+        if (!processingSet.hasCapacity(concertId)) {
+            return null;
+        }
+
+        String userId = waitingQueue.pollTopUser(concertId);
+        if (userId != null) {
+            processingSet.add(concertId, userId);
+        }
+        return userId;
     }
 
     private void validateUniqueEntry(Long concertId, String userId) {
