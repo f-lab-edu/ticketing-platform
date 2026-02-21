@@ -2,6 +2,7 @@ package com.ticket_service.queue.service;
 
 import com.ticket_service.common.redis.RedissonLockTemplate;
 import com.ticket_service.queue.exception.AlreadyInQueueException;
+import com.ticket_service.queue.exception.QueueFullException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -67,12 +68,25 @@ class RedisQueueServiceTest {
         void enqueue_success_first_user() {
             given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(false);
+            given(waitingQueue.hasCapacity(CONCERT_ID)).willReturn(true);
             given(waitingQueue.rank(CONCERT_ID, USER_ID)).willReturn(0L);
 
             Long position = redisQueueService.enterWaitingQueue(CONCERT_ID, USER_ID);
 
             assertThat(position).isEqualTo(0L);
             verify(waitingQueue).add(CONCERT_ID, USER_ID);
+        }
+
+        @DisplayName("대기열 등록 실패 - 대기열이 가득 참")
+        @Test
+        void enqueue_fail_queue_full() {
+            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
+            given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(false);
+            given(waitingQueue.hasCapacity(CONCERT_ID)).willReturn(false);
+
+            assertThatThrownBy(() -> redisQueueService.enterWaitingQueue(CONCERT_ID, USER_ID))
+                    .isInstanceOf(QueueFullException.class)
+                    .hasMessage("현재 대기 인원이 많아 접수가 어렵습니다. 잠시 후 다시 시도해주세요.");
         }
 
         @DisplayName("대기열 등록 실패 - 이미 처리중인 사용자")
