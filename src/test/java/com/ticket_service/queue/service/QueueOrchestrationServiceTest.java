@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -53,6 +54,9 @@ class QueueOrchestrationServiceTest {
             given(queueService.enterWaitingQueue(CONCERT_ID, USER_ID)).willReturn(0L);
             given(queueService.hasProcessingCapacity(CONCERT_ID)).willReturn(true);
             given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of(USER_ID));
+            given(sseEmitterService.sendEventAsync(eq(CONCERT_ID), eq(USER_ID),
+                    eq(QueueEventType.ENTER), any(QueueEnterEvent.class)))
+                    .willReturn(CompletableFuture.completedFuture(null));
 
             // when
             SseEmitter result = queueOrchestrationService.registerAndSubscribe(CONCERT_ID, USER_ID);
@@ -65,7 +69,7 @@ class QueueOrchestrationServiceTest {
             inOrder.verify(queueService).enterWaitingQueue(CONCERT_ID, USER_ID);
             inOrder.verify(queueService).hasProcessingCapacity(CONCERT_ID);
             inOrder.verify(queueService).permitProcessing(CONCERT_ID);
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq(USER_ID),
+            inOrder.verify(sseEmitterService).sendEventAsync(eq(CONCERT_ID), eq(USER_ID),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, USER_ID);
         }
@@ -99,6 +103,9 @@ class QueueOrchestrationServiceTest {
         void onPurchaseComplete_success() {
             // given
             given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of("user-2"));
+            given(sseEmitterService.sendEventAsync(eq(CONCERT_ID), eq("user-2"),
+                    eq(QueueEventType.ENTER), any(QueueEnterEvent.class)))
+                    .willReturn(CompletableFuture.completedFuture(null));
 
             // when
             queueOrchestrationService.onPurchaseComplete(CONCERT_ID, USER_ID);
@@ -107,7 +114,7 @@ class QueueOrchestrationServiceTest {
             InOrder inOrder = inOrder(queueService, sseEmitterService);
             inOrder.verify(queueService).completeProcessing(CONCERT_ID, USER_ID);
             inOrder.verify(queueService).permitProcessing(CONCERT_ID);
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
+            inOrder.verify(sseEmitterService).sendEventAsync(eq(CONCERT_ID), eq("user-2"),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, "user-2");
         }
@@ -122,6 +129,9 @@ class QueueOrchestrationServiceTest {
         void onCancel_success() {
             // given
             given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of("user-2"));
+            given(sseEmitterService.sendEventAsync(eq(CONCERT_ID), eq("user-2"),
+                    eq(QueueEventType.ENTER), any(QueueEnterEvent.class)))
+                    .willReturn(CompletableFuture.completedFuture(null));
 
             // when
             queueOrchestrationService.onCancel(CONCERT_ID, USER_ID);
@@ -131,7 +141,7 @@ class QueueOrchestrationServiceTest {
             inOrder.verify(queueService).removeFromQueue(CONCERT_ID, USER_ID);
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, USER_ID);
             inOrder.verify(queueService).permitProcessing(CONCERT_ID);
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
+            inOrder.verify(sseEmitterService).sendEventAsync(eq(CONCERT_ID), eq("user-2"),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, "user-2");
         }

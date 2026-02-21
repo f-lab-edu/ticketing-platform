@@ -6,6 +6,7 @@ import com.ticket_service.queue.service.dto.QueueEnterMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -18,6 +19,7 @@ public class QueueEventPublisher {
     private final RedisTemplate<String, String> queueRedisTemplate;
     private final ObjectMapper objectMapper;
 
+    @Async("sseTaskExecutor")
     public void publishEnterEvent(Long concertId, String userId) {
         try {
             QueueEnterMessage message = QueueEnterMessage.of(concertId, userId);
