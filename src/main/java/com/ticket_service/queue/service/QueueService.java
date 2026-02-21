@@ -14,6 +14,8 @@ public interface QueueService {
 
     List<String> permitProcessing(Long concertId);
 
+    String permitOneProcessing(Long concertId);
+
     boolean hasProcessingCapacity(Long concertId);
 
     List<String> getWaitingUsers(Long concertId);

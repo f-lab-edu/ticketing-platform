@@ -1,4 +1,4 @@
-.PHONY: local-up local-down test-up test-down
+.PHONY: local-up local-down test-up test-down multi-up multi-down multi-build
 
 ## ========================
 ## Local DB
@@ -19,3 +19,16 @@ test-up:
 
 test-down:
 	docker compose -p ticket-test --env-file ./docker/.env -f ./docker/docker-compose-test.yml down
+
+## ========================
+## Multi-node (Performance Test)
+## ========================
+
+multi-up:
+	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node.yml up -d
+
+multi-down:
+	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node.yml down
+
+multi-build:
+	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node.yml up -d --build
