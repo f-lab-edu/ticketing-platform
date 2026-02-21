@@ -18,7 +18,7 @@ const timeToEnter = new Trend('time_to_enter', true);
 const purchaseDuration = new Trend('purchase_duration', true);
 
 // 사용자 행동 대기 시간 (enter 수신 후 구매 버튼 클릭까지, 초 단위)
-const THINK_TIME = parseFloat(__ENV.THINK_TIME) || 10;
+const THINK_TIME = parseFloat(__ENV.THINK_TIME) || 5;
 
 export const options = {
     scenarios: {
@@ -64,8 +64,8 @@ export default function () {
 
                 // 사용자 행동 시뮬레이션: enter 수신 후 구매까지 대기
                 if (THINK_TIME > 0) {
-                    // sleep(THINK_TIME); // 구매 하는데 걸리는 시간 (고정)
-                    sleep(Math.random() * THINK_TIME); // 구매 하는데 걸리는 시간 (랜덤)
+                    sleep(THINK_TIME); // 구매 하는데 걸리는 시간 (고정)
+                    // sleep(Math.random() * THINK_TIME); // 구매 하는데 걸리는 시간 (랜덤)
                 }
 
                 // enter 이벤트를 받으면 구매 API 호출
