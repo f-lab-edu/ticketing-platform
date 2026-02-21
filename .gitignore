@@ -37,3 +37,6 @@ out/
 .vscode/
 
 docker/.env
+
+performance/k6/k6
+.claude

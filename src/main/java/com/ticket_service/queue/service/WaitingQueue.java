@@ -67,4 +67,17 @@ public class WaitingQueue {
         }
         return result;
     }
+
+    public String pollTopUser(Long concertId) {
+        String key = QueueKey.waitingQueue(concertId);
+        Set<String> users = queueRedisTemplate.opsForZSet().range(key, 0, 0);
+
+        if (users == null || users.isEmpty()) {
+            return null;
+        }
+
+        String userId = users.iterator().next();
+        queueRedisTemplate.opsForZSet().remove(key, userId);
+        return userId;
+    }
 }

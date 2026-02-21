@@ -16,7 +16,7 @@ queue:
   entry-timeout: 5m
   waiting-timeout: 30m
   sse-timeout: 10m
-
+  position-broadcast-interval-ms: 5000
 management:
   endpoints:
     web:

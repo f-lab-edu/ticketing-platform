@@ -1,0 +1,118 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ticket-mysql
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD_LOCAL}
+      MYSQL_DATABASE: ${MYSQL_DATABASE_LOCAL}
+      MYSQL_USER: ${MYSQL_USER_LOCAL}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD_LOCAL}
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - ticket-service-multinode-mysql-data:/var/lib/mysql
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2
+    container_name: ticket-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - ticket-service-multinode-redis-data:/data
+
+  app-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ticket-app-1
+    environment:
+      SPRING_PROFILES_ACTIVE: performance-test
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE_LOCAL}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER_LOCAL}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD_LOCAL}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  app-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ticket-app-2
+    environment:
+      SPRING_PROFILES_ACTIVE: performance-test
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE_LOCAL}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER_LOCAL}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD_LOCAL}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 8080
+      SPRING_SQL_INIT_MODE: never
+      SPRING_JPA_HIBERNATE_DDL_AUTO: none
+    ports:
+      - "8081:8080"
+    depends_on:
+      app-1:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  nginx:
+    image: nginx:alpine
+    container_name: ticket-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app-1
+      - app-2
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ticket-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ticket-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ticket-service-multinode-grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  ticket-service-multinode-mysql-data:
+  ticket-service-multinode-redis-data:
+  ticket-service-multinode-grafana-data:
