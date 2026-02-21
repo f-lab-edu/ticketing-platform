@@ -72,6 +72,7 @@ services:
       REDIS_PORT: 6379
       SERVER_PORT: 8080
       SPRING_SQL_INIT_MODE: never
+      SPRING_JPA_HIBERNATE_DDL_AUTO: none
     ports:
       - "8081:8080"
     depends_on:

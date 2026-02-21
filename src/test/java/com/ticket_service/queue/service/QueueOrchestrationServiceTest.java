@@ -29,6 +29,9 @@ class QueueOrchestrationServiceTest {
     @Mock
     private SseEmitterService sseEmitterService;
 
+    @Mock
+    private QueueEventPublisher queueEventPublisher;
+
     @InjectMocks
     private QueueOrchestrationService queueOrchestrationService;
 

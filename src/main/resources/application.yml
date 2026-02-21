@@ -13,9 +13,9 @@ redis:
 
 queue:
   max-processing-count: 100
-  entry-timeout-seconds: 300
-  waiting-timeout-seconds: 1800
-  sse-timeout-milliseconds: 600000
+  entry-timeout: 5m
+  waiting-timeout: 30m
+  sse-timeout: 10m
   position-broadcast-interval-ms: 5000
 
 management:

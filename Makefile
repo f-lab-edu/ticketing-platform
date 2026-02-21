@@ -25,10 +25,10 @@ test-down:
 ## ========================
 
 multi-up:
-	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node.yml up -d
+	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node-local.yml up -d
 
 multi-down:
-	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node.yml down
+	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node-local.yml down
 
 multi-build:
-	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node.yml up -d --build
+	docker compose -p ticket-multi -f ./docker/docker-compose-multi-node-local.yml up -d --build

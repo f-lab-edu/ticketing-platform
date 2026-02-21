@@ -4,7 +4,8 @@ import { Counter, Trend } from 'k6/metrics';
 import sse from 'k6/x/sse';
 
 // 설정
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+// const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:80';
 const CONCERT_ID = __ENV.CONCERT_ID || 1;
 const REQUEST_QUANTITY = __ENV.REQUEST_QUANTITY || 1;
 
@@ -23,7 +24,7 @@ export const options = {
     scenarios: {
         ticket_purchase: {
             executor: 'constant-vus',
-            vus: parseInt(__ENV.VUS) || 300,        // 동시 접속 사용자 수
+            vus: parseInt(__ENV.VUS) || 1000,        // 동시 접속 사용자 수
             duration: __ENV.DURATION || '30s',       // 테스트 지속 시간
         },
     },
@@ -63,8 +64,8 @@ export default function () {
 
                 // 사용자 행동 시뮬레이션: enter 수신 후 구매까지 대기
                 if (THINK_TIME > 0) {
-                    // sleep(THINK_TIME);
-                    sleep(Math.random() * 30);
+                    // sleep(THINK_TIME); // 구매 하는데 걸리는 시간 (고정)
+                    sleep(Math.random() * THINK_TIME); // 구매 하는데 걸리는 시간 (랜덤)
                 }
 
                 // enter 이벤트를 받으면 구매 API 호출
