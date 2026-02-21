@@ -13,6 +13,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -46,11 +48,11 @@ class QueueOrchestrationServiceTest {
         @Test
         void registerAndSubscribe_with_capacity() {
             // given
-            given(queueService.enterWaitingQueue(CONCERT_ID, USER_ID)).willReturn(0L);
             SseEmitter mockEmitter = new SseEmitter();
             given(sseEmitterService.createEmitter(CONCERT_ID, USER_ID)).willReturn(mockEmitter);
+            given(queueService.enterWaitingQueue(CONCERT_ID, USER_ID)).willReturn(0L);
             given(queueService.hasProcessingCapacity(CONCERT_ID)).willReturn(true);
-            given(queueService.permitOneProcessing(CONCERT_ID)).willReturn(USER_ID);
+            given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of(USER_ID));
 
             // when
             SseEmitter result = queueOrchestrationService.registerAndSubscribe(CONCERT_ID, USER_ID);
@@ -59,10 +61,10 @@ class QueueOrchestrationServiceTest {
             assertThat(result).isSameAs(mockEmitter);
 
             InOrder inOrder = inOrder(queueService, sseEmitterService);
-            inOrder.verify(queueService).enterWaitingQueue(CONCERT_ID, USER_ID);
             inOrder.verify(sseEmitterService).createEmitter(CONCERT_ID, USER_ID);
+            inOrder.verify(queueService).enterWaitingQueue(CONCERT_ID, USER_ID);
             inOrder.verify(queueService).hasProcessingCapacity(CONCERT_ID);
-            inOrder.verify(queueService).permitOneProcessing(CONCERT_ID);
+            inOrder.verify(queueService).permitProcessing(CONCERT_ID);
             inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq(USER_ID),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, USER_ID);
@@ -96,7 +98,7 @@ class QueueOrchestrationServiceTest {
         @Test
         void onPurchaseComplete_success() {
             // given
-            given(queueService.permitOneProcessing(CONCERT_ID)).willReturn("user-2");
+            given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of("user-2"));
 
             // when
             queueOrchestrationService.onPurchaseComplete(CONCERT_ID, USER_ID);
@@ -104,7 +106,7 @@ class QueueOrchestrationServiceTest {
             // then
             InOrder inOrder = inOrder(queueService, sseEmitterService);
             inOrder.verify(queueService).completeProcessing(CONCERT_ID, USER_ID);
-            inOrder.verify(queueService).permitOneProcessing(CONCERT_ID);
+            inOrder.verify(queueService).permitProcessing(CONCERT_ID);
             inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, "user-2");
@@ -119,7 +121,7 @@ class QueueOrchestrationServiceTest {
         @Test
         void onCancel_success() {
             // given
-            given(queueService.permitOneProcessing(CONCERT_ID)).willReturn("user-2");
+            given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of("user-2"));
 
             // when
             queueOrchestrationService.onCancel(CONCERT_ID, USER_ID);
@@ -128,7 +130,7 @@ class QueueOrchestrationServiceTest {
             InOrder inOrder = inOrder(queueService, sseEmitterService);
             inOrder.verify(queueService).removeFromQueue(CONCERT_ID, USER_ID);
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, USER_ID);
-            inOrder.verify(queueService).permitOneProcessing(CONCERT_ID);
+            inOrder.verify(queueService).permitProcessing(CONCERT_ID);
             inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, "user-2");
