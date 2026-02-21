@@ -17,14 +17,19 @@ public class QueueOrchestrationService {
 
     private final QueueService queueService;
     private final SseEmitterService sseEmitterService;
+    private final QueueEventPublisher queueEventPublisher;
 
     /**
      * 대기열 등록 + SSE 구독
      * 등록 후 대기 순번 또는 즉시 입장 이벤트를 전송한다.
+     *
+     * 중요: emitter를 먼저 생성한 후 대기열에 추가해야 함.
+     * 그렇지 않으면 다른 스레드에서 enterNextAndNotify 호출 시
+     * emitter가 없어 enter 이벤트를 놓칠 수 있음.
      */
     public SseEmitter registerAndSubscribe(Long concertId, String userId) {
-        Long position = queueService.enterWaitingQueue(concertId, userId);
         SseEmitter emitter = sseEmitterService.createEmitter(concertId, userId);
+        Long position = queueService.enterWaitingQueue(concertId, userId);
 
         if (queueService.hasProcessingCapacity(concertId)) {
             enterNextAndNotify(concertId);
@@ -60,18 +65,13 @@ public class QueueOrchestrationService {
 
     /**
      * 다음 대기자들을 입장시키고 입장 완료 SSE 이벤트를 전송한다.
-     * 이후 남은 대기자들에게 갱신된 순번을 전송한다.
+     * 순번 업데이트는 QueuePositionBatchScheduler에서 주기적으로 처리한다.
      */
     private void enterNextAndNotify(Long concertId) {
         List<String> enteredUsers = queueService.permitProcessing(concertId);
         for (String enteredUserId : enteredUsers) {
             sseEmitterService.sendEvent(concertId, enteredUserId, QueueEventType.ENTER, QueueEnterEvent.processing());
             sseEmitterService.completeEmitter(concertId, enteredUserId);
-        }
-
-        List<String> waitingUsers = queueService.getWaitingUsers(concertId);
-        for (int i = 0; i < waitingUsers.size(); i++) {
-            sseEmitterService.sendEvent(concertId, waitingUsers.get(i), QueueEventType.QUEUE_POSITION, new QueuePositionEvent(i));
         }
     }
 }
