@@ -13,8 +13,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -41,7 +39,7 @@ class QueueOrchestrationServiceTest {
     @DisplayName("registerAndSubscribe 메서드")
     class RegisterAndSubscribeTest {
 
-        @DisplayName("처리열에 여유가 있으면 입장 처리 후 SSE 종료하고 남은 대기자에게 순번을 갱신한다")
+        @DisplayName("처리열에 여유가 있으면 1명 입장 처리 후 SSE 종료한다")
         @Test
         void registerAndSubscribe_with_capacity() {
             // given
@@ -49,8 +47,7 @@ class QueueOrchestrationServiceTest {
             SseEmitter mockEmitter = new SseEmitter();
             given(sseEmitterService.createEmitter(CONCERT_ID, USER_ID)).willReturn(mockEmitter);
             given(queueService.hasProcessingCapacity(CONCERT_ID)).willReturn(true);
-            given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of(USER_ID));
-            given(queueService.getWaitingUsers(CONCERT_ID)).willReturn(List.of("user-2", "user-3"));
+            given(queueService.permitOneProcessing(CONCERT_ID)).willReturn(USER_ID);
 
             // when
             SseEmitter result = queueOrchestrationService.registerAndSubscribe(CONCERT_ID, USER_ID);
@@ -62,14 +59,10 @@ class QueueOrchestrationServiceTest {
             inOrder.verify(queueService).enterWaitingQueue(CONCERT_ID, USER_ID);
             inOrder.verify(sseEmitterService).createEmitter(CONCERT_ID, USER_ID);
             inOrder.verify(queueService).hasProcessingCapacity(CONCERT_ID);
-            inOrder.verify(queueService).permitProcessing(CONCERT_ID);
+            inOrder.verify(queueService).permitOneProcessing(CONCERT_ID);
             inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq(USER_ID),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, USER_ID);
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
-                    eq(QueueEventType.QUEUE_POSITION), any(QueuePositionEvent.class));
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-3"),
-                    eq(QueueEventType.QUEUE_POSITION), any(QueuePositionEvent.class));
         }
 
         @DisplayName("처리열이 가득 차면 대기 순번 이벤트만 전송한다")
@@ -96,12 +89,11 @@ class QueueOrchestrationServiceTest {
     @DisplayName("onPurchaseComplete 메서드")
     class OnPurchaseCompleteTest {
 
-        @DisplayName("구매 완료 시 complete → 다음 대기자 입장 및 SSE 종료 → 남은 대기자 순번 갱신")
+        @DisplayName("구매 완료 시 complete → 다음 대기자 1명 입장 및 SSE 종료")
         @Test
         void onPurchaseComplete_success() {
             // given
-            given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of("user-2"));
-            given(queueService.getWaitingUsers(CONCERT_ID)).willReturn(List.of("user-3"));
+            given(queueService.permitOneProcessing(CONCERT_ID)).willReturn("user-2");
 
             // when
             queueOrchestrationService.onPurchaseComplete(CONCERT_ID, USER_ID);
@@ -109,12 +101,10 @@ class QueueOrchestrationServiceTest {
             // then
             InOrder inOrder = inOrder(queueService, sseEmitterService);
             inOrder.verify(queueService).completeProcessing(CONCERT_ID, USER_ID);
-            inOrder.verify(queueService).permitProcessing(CONCERT_ID);
+            inOrder.verify(queueService).permitOneProcessing(CONCERT_ID);
             inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, "user-2");
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-3"),
-                    eq(QueueEventType.QUEUE_POSITION), any(QueuePositionEvent.class));
         }
     }
 
@@ -122,12 +112,11 @@ class QueueOrchestrationServiceTest {
     @DisplayName("onCancel 메서드")
     class OnCancelTest {
 
-        @DisplayName("취소 시 dequeue → SSE 종료 → 다음 대기자 입장 및 SSE 종료 → 남은 대기자 순번 갱신")
+        @DisplayName("취소 시 dequeue → SSE 종료 → 다음 대기자 1명 입장 및 SSE 종료")
         @Test
         void onCancel_success() {
             // given
-            given(queueService.permitProcessing(CONCERT_ID)).willReturn(List.of("user-2"));
-            given(queueService.getWaitingUsers(CONCERT_ID)).willReturn(List.of("user-3"));
+            given(queueService.permitOneProcessing(CONCERT_ID)).willReturn("user-2");
 
             // when
             queueOrchestrationService.onCancel(CONCERT_ID, USER_ID);
@@ -136,12 +125,10 @@ class QueueOrchestrationServiceTest {
             InOrder inOrder = inOrder(queueService, sseEmitterService);
             inOrder.verify(queueService).removeFromQueue(CONCERT_ID, USER_ID);
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, USER_ID);
-            inOrder.verify(queueService).permitProcessing(CONCERT_ID);
+            inOrder.verify(queueService).permitOneProcessing(CONCERT_ID);
             inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-2"),
                     eq(QueueEventType.ENTER), any(QueueEnterEvent.class));
             inOrder.verify(sseEmitterService).completeEmitter(CONCERT_ID, "user-2");
-            inOrder.verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq("user-3"),
-                    eq(QueueEventType.QUEUE_POSITION), any(QueuePositionEvent.class));
         }
     }
 }

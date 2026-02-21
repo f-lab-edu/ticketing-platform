@@ -12,10 +12,10 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const TICKET_STOCK_ID = __ENV.TICKET_STOCK_ID || 1;
+const CONCERT_ID = __ENV.CONCERT_ID || 1;
 
 export default function () {
-    const url = `${BASE_URL}/ticket-stocks/${TICKET_STOCK_ID}/direct`;
+    const url = `${BASE_URL}/concerts/${CONCERT_ID}/purchase/direct`;
 
     const payload = JSON.stringify({
         requestQuantity: 1,
