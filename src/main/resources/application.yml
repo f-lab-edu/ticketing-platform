@@ -1,3 +1,10 @@
+server:
+  tomcat:
+    accept-count: 100
+    threads:
+      max: 200
+      min-spare: 50
+
 spring:
   application:
     name: ticket-service
