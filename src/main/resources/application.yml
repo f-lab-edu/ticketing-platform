@@ -6,10 +6,10 @@ spring:
       ddl-auto: create-drop
 
 redis:
-  timeout: 3000
+  timeout: 3s
   lock:
-    wait-time: 5
-    lease-time: 3
+    wait-time: 5s
+    lease-time: 3s
 
 queue:
   max-processing-count: 100
@@ -17,7 +17,6 @@ queue:
   waiting-timeout: 30m
   sse-timeout: 10m
   position-broadcast-interval-ms: 5000
-
 management:
   endpoints:
     web:

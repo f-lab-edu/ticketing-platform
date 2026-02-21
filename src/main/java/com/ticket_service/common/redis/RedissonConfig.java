@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+
 @Configuration
 @RequiredArgsConstructor
 public class RedissonConfig {
@@ -17,8 +19,8 @@ public class RedissonConfig {
     @Value("${redis.port}")
     private int port;
 
-    @Value("${redis.timeout:3000}")
-    private int timeout;
+    @Value("${redis.timeout}")
+    private Duration timeout;
 
     @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
@@ -26,7 +28,7 @@ public class RedissonConfig {
 
         config.useSingleServer()
                 .setAddress("redis://" + host + ":" + port)
-                .setTimeout(timeout);
+                .setTimeout((int) timeout.toMillis());
 
         return Redisson.create(config);
     }

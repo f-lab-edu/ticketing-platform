@@ -5,7 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,6 +22,7 @@ class SseEmitterServiceTest {
     @BeforeEach
     void setUp() {
         sseEmitterService = new SseEmitterService();
+        ReflectionTestUtils.setField(sseEmitterService, "sseTimeout", Duration.ofMinutes(10));
     }
 
     @Nested

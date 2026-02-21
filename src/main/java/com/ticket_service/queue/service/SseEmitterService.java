@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -18,8 +19,8 @@ import java.util.stream.Collectors;
 @Service
 public class SseEmitterService {
 
-    @Value("${queue.sse-timeout-milliseconds:600000}")
-    private long sseTimeoutMilliseconds;
+    @Value("${queue.sse-timeout}")
+    private Duration sseTimeout;
 
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
@@ -31,7 +32,7 @@ public class SseEmitterService {
             return null;
         });
 
-        SseEmitter emitter = new SseEmitter(sseTimeoutMilliseconds);
+        SseEmitter emitter = new SseEmitter(sseTimeout.toMillis());
         registerCallbacks(emitter, key, concertId, userId);
 
         emitters.put(key, emitter);
