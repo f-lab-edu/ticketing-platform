@@ -64,4 +64,25 @@ public class RedissonLockTemplate {
             }
         }
     }
+
+    public void tryExecuteWithLock(String key, Runnable action) {
+        RLock lock = redissonClient.getLock(key);
+        boolean locked = false;
+
+        try {
+            locked = lock.tryLock(0, leaseTime.toMillis(), TimeUnit.MILLISECONDS);
+
+            if (!locked) {
+                return;
+            }
+
+            action.run();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
 }

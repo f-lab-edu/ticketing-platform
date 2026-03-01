@@ -25,8 +25,8 @@ public class QueuePositionBatchScheduler {
             try {
                 List<String> waitingUsers = queueService.getWaitingUsers(concertId);
                 if (!waitingUsers.isEmpty()) {
-                    sseEmitterService.broadcastPositions(concertId, waitingUsers);
-                    log.debug("순번 브로드캐스트 완료: concertId={}, userCount={}", concertId, waitingUsers.size());
+                    sseEmitterService.broadcastPositionsAsync(concertId, waitingUsers)
+                            .thenRun(() -> log.debug("순번 브로드캐스트 완료: concertId={}, userCount={}", concertId, waitingUsers.size()));
                 }
             } catch (Exception e) {
                 log.error("순번 브로드캐스트 실패: concertId={}", concertId, e);

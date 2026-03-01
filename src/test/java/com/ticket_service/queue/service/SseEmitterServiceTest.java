@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,7 +22,8 @@ class SseEmitterServiceTest {
 
     @BeforeEach
     void setUp() {
-        sseEmitterService = new SseEmitterService();
+        Executor directExecutor = Runnable::run;
+        sseEmitterService = new SseEmitterService(directExecutor);
         ReflectionTestUtils.setField(sseEmitterService, "sseTimeout", Duration.ofMinutes(10));
     }
 

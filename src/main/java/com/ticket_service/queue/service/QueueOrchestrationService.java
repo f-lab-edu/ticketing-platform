@@ -1,6 +1,5 @@
 package com.ticket_service.queue.service;
 
-import com.ticket_service.queue.service.dto.QueueEnterEvent;
 import com.ticket_service.queue.service.dto.QueueEventType;
 import com.ticket_service.queue.service.dto.QueuePositionEvent;
 import lombok.RequiredArgsConstructor;
@@ -64,7 +63,8 @@ public class QueueOrchestrationService {
     }
 
     /**
-     * 다음 대기자들을 입장시키고 입장 완료 SSE 이벤트를 전송한다.
+     * 다음 대기자들을 입장시키고 Redis Pub/Sub으로 입장 이벤트를 발행한다.
+     * 각 서버의 QueueEventSubscriber가 메시지를 받아 해당 사용자에게 SSE를 전송한다.
      * 순번 업데이트는 QueuePositionBatchScheduler에서 주기적으로 처리한다.
      */
     private void enterNextAndNotify(Long concertId) {
