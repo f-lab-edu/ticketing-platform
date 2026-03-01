@@ -1,8 +1,10 @@
 package com.ticket_service.ticket.service;
 
+import com.ticket_service.common.metrics.QueueMetrics;
 import com.ticket_service.queue.exception.QueueAccessDeniedException;
 import com.ticket_service.queue.service.QueueOrchestrationService;
 import com.ticket_service.ticket.exception.InsufficientTicketStockException;
+import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -26,6 +29,9 @@ class TicketPurchaseServiceTest {
 
     @Mock
     private TicketStockService ticketStockService;
+
+    @Mock
+    private QueueMetrics queueMetrics;
 
     @InjectMocks
     private TicketPurchaseService ticketPurchaseService;
@@ -39,6 +45,7 @@ class TicketPurchaseServiceTest {
     void purchase_success() {
         // given
         given(queueOrchestrationService.isInProcessing(CONCERT_ID, USER_ID)).willReturn(true);
+        given(queueMetrics.getPurchaseDurationTimer()).willReturn(mock(Timer.class));
 
         // when
         ticketPurchaseService.purchase(CONCERT_ID, USER_ID, QUANTITY);
@@ -71,6 +78,7 @@ class TicketPurchaseServiceTest {
     void purchase_fail_insufficient_stock_but_complete_called() {
         // given
         given(queueOrchestrationService.isInProcessing(CONCERT_ID, USER_ID)).willReturn(true);
+        given(queueMetrics.getPurchaseDurationTimer()).willReturn(mock(Timer.class));
         willThrow(new InsufficientTicketStockException(0, QUANTITY))
                 .given(ticketStockService).decreaseByConcertId(CONCERT_ID, QUANTITY);
 
@@ -89,6 +97,7 @@ class TicketPurchaseServiceTest {
     void purchase_fail_unexpected_exception_but_complete_called() {
         // given
         given(queueOrchestrationService.isInProcessing(CONCERT_ID, USER_ID)).willReturn(true);
+        given(queueMetrics.getPurchaseDurationTimer()).willReturn(mock(Timer.class));
         willThrow(new RuntimeException("예상치 못한 오류"))
                 .given(ticketStockService).decreaseByConcertId(CONCERT_ID, QUANTITY);
 
