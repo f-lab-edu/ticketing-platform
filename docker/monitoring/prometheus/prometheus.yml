@@ -6,4 +6,7 @@ scrape_configs:
     metrics_path: "/actuator/prometheus"
     static_configs:
       - targets:
-          - host.docker.internal:8080
+          - app-1:8080
+          - app-2:8080
+        labels:
+          env: "local"

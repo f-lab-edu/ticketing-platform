@@ -1,6 +1,8 @@
 package com.ticket_service.queue.exception;
 
 import com.ticket_service.common.dto.ApiResponse;
+import com.ticket_service.common.metrics.QueueMetrics;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,7 +11,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @Slf4j
 @RestControllerAdvice(basePackages = "com.ticket_service.queue")
+@RequiredArgsConstructor
 public class QueueExceptionHandler {
+
+    private final QueueMetrics queueMetrics;
 
     @ExceptionHandler(AlreadyInQueueException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
@@ -22,6 +27,7 @@ public class QueueExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ApiResponse<Void> handleQueueAccessDenied(QueueAccessDeniedException e) {
         log.debug("Queue access denied: {}", e.getMessage());
+        queueMetrics.incrementPurchaseFailedAccessDenied();
         return ApiResponse.of(HttpStatus.FORBIDDEN, e.getMessage(), null);
     }
 
@@ -30,5 +36,12 @@ public class QueueExceptionHandler {
     public ApiResponse<Void> handleNotInQueue(NotInQueueException e) {
         log.debug("Not in queue: {}", e.getMessage());
         return ApiResponse.of(HttpStatus.NOT_FOUND, e.getMessage(), null);
+    }
+
+    @ExceptionHandler(QueueFullException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ApiResponse<Void> handleQueueFull(QueueFullException e) {
+        log.warn("Queue full: {}", e.getMessage());
+        return ApiResponse.of(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), null);
     }
 }

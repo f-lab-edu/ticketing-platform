@@ -40,16 +40,16 @@ public class QueueEventSubscriber implements MessageListener {
             Long concertId = enterMessage.getConcertId();
             String userId = enterMessage.getUserId();
 
-            boolean sent = sseEmitterService.sendEventAndComplete(
+            sseEmitterService.sendEventAndCompleteAsync(
                     concertId,
                     userId,
                     QueueEventType.ENTER,
                     QueueEnterEvent.processing()
-            );
-
-            if (sent) {
-                log.info("[SUB] 입장 이벤트 전송 성공: concertId={}, userId={}", concertId, userId);
-            }
+            ).thenAccept(sent -> {
+                if (sent) {
+                    log.info("[SUB] 입장 이벤트 전송 성공: concertId={}, userId={}", concertId, userId);
+                }
+            });
         } catch (Exception e) {
             log.error("입장 이벤트 처리 실패", e);
         }

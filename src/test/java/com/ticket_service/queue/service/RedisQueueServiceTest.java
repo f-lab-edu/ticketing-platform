@@ -1,7 +1,9 @@
 package com.ticket_service.queue.service;
 
+import com.ticket_service.common.metrics.QueueMetrics;
 import com.ticket_service.common.redis.RedissonLockTemplate;
 import com.ticket_service.queue.exception.AlreadyInQueueException;
+import com.ticket_service.queue.exception.QueueFullException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -37,6 +39,9 @@ class RedisQueueServiceTest {
     @Mock
     private RedissonLockTemplate redissonLockTemplate;
 
+    @Mock
+    private QueueMetrics queueMetrics;
+
     private RedisQueueService redisQueueService;
 
     private static final Long CONCERT_ID = 1L;
@@ -44,7 +49,7 @@ class RedisQueueServiceTest {
 
     @BeforeEach
     void setUp() {
-        redisQueueService = new RedisQueueService(waitingQueue, processingSet, redissonLockTemplate);
+        redisQueueService = new RedisQueueService(waitingQueue, processingSet, redissonLockTemplate, queueMetrics);
 
         given(redissonLockTemplate.executeWithLock(anyString(), any(Supplier.class)))
                 .willAnswer(invocation -> {
@@ -67,12 +72,25 @@ class RedisQueueServiceTest {
         void enqueue_success_first_user() {
             given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(false);
+            given(waitingQueue.hasCapacity(CONCERT_ID)).willReturn(true);
             given(waitingQueue.rank(CONCERT_ID, USER_ID)).willReturn(0L);
 
             Long position = redisQueueService.enterWaitingQueue(CONCERT_ID, USER_ID);
 
             assertThat(position).isEqualTo(0L);
             verify(waitingQueue).add(CONCERT_ID, USER_ID);
+        }
+
+        @DisplayName("대기열 등록 실패 - 대기열이 가득 참")
+        @Test
+        void enqueue_fail_queue_full() {
+            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
+            given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(false);
+            given(waitingQueue.hasCapacity(CONCERT_ID)).willReturn(false);
+
+            assertThatThrownBy(() -> redisQueueService.enterWaitingQueue(CONCERT_ID, USER_ID))
+                    .isInstanceOf(QueueFullException.class)
+                    .hasMessage("현재 대기 인원이 많아 접수가 어렵습니다. 잠시 후 다시 시도해주세요.");
         }
 
         @DisplayName("대기열 등록 실패 - 이미 처리중인 사용자")
@@ -157,12 +175,19 @@ class RedisQueueServiceTest {
         @Test
         void enterNextUsers_success() {
             given(processingSet.remainingCapacity(CONCERT_ID)).willReturn(5L);
-            given(waitingQueue.pollTopUsers(CONCERT_ID, 5)).willReturn(List.of("user-1", "user-2", "user-3"));
+            given(waitingQueue.pollTopUsersWithWaitingTime(CONCERT_ID, 5)).willReturn(List.of(
+                    new PolledUser("user-1", 1000L),
+                    new PolledUser("user-2", 2000L),
+                    new PolledUser("user-3", 3000L)
+            ));
 
             List<String> enteredUsers = redisQueueService.permitProcessing(CONCERT_ID);
 
             assertThat(enteredUsers).containsExactly("user-1", "user-2", "user-3");
             verify(processingSet).addAll(CONCERT_ID, List.of("user-1", "user-2", "user-3"));
+            verify(queueMetrics).recordWaitingTime(CONCERT_ID, 1000L);
+            verify(queueMetrics).recordWaitingTime(CONCERT_ID, 2000L);
+            verify(queueMetrics).recordWaitingTime(CONCERT_ID, 3000L);
         }
 
         @DisplayName("가용 슬롯이 없으면 빈 목록 반환")
@@ -173,14 +198,14 @@ class RedisQueueServiceTest {
             List<String> enteredUsers = redisQueueService.permitProcessing(CONCERT_ID);
 
             assertThat(enteredUsers).isEmpty();
-            verify(waitingQueue, never()).pollTopUsers(anyLong(), anyLong());
+            verify(waitingQueue, never()).pollTopUsersWithWaitingTime(anyLong(), anyLong());
         }
 
         @DisplayName("대기열이 비어있으면 빈 목록 반환")
         @Test
         void enterNextUsers_empty_waiting_queue() {
             given(processingSet.remainingCapacity(CONCERT_ID)).willReturn(100L);
-            given(waitingQueue.pollTopUsers(CONCERT_ID, 100)).willReturn(List.of());
+            given(waitingQueue.pollTopUsersWithWaitingTime(CONCERT_ID, 100)).willReturn(List.of());
 
             List<String> enteredUsers = redisQueueService.permitProcessing(CONCERT_ID);
 
