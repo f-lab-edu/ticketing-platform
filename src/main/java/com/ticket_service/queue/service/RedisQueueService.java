@@ -1,8 +1,10 @@
 package com.ticket_service.queue.service;
 
+import com.ticket_service.common.metrics.QueueMetrics;
 import com.ticket_service.common.redis.LockKey;
 import com.ticket_service.common.redis.RedissonLockTemplate;
 import com.ticket_service.queue.exception.AlreadyInQueueException;
+import com.ticket_service.queue.exception.QueueFullException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,14 +17,16 @@ public class RedisQueueService implements QueueService {
     private final WaitingQueue waitingQueue;
     private final ProcessingSet processingSet;
     private final RedissonLockTemplate redissonLockTemplate;
+    private final QueueMetrics queueMetrics;
 
     @Override
     public Long enterWaitingQueue(Long concertId, String userId) {
         return redissonLockTemplate.executeWithLock(
                 LockKey.queueUser(concertId, userId),
                 () -> {
-                    validateUniqueEntry(concertId, userId);
+                    validateEntry(concertId, userId);
                     waitingQueue.add(concertId, userId);
+                    queueMetrics.incrementQueueEnter(concertId);
                     return getPosition(concertId, userId);
                 }
         );
@@ -74,11 +78,23 @@ public class RedisQueueService implements QueueService {
             return List.of();
         }
 
-        List<String> enteredUsers = waitingQueue.pollTopUsers(concertId, limit);
-        if (!enteredUsers.isEmpty()) {
-            processingSet.addAll(concertId, enteredUsers);
+        List<PolledUser> polledUsers = waitingQueue.pollTopUsersWithWaitingTime(concertId, limit);
+        if (polledUsers.isEmpty()) {
+            return List.of();
         }
-        return enteredUsers;
+
+        List<String> userIds = polledUsers.stream()
+                .map(PolledUser::userId)
+                .toList();
+
+        processingSet.addAll(concertId, userIds);
+
+        for (PolledUser polledUser : polledUsers) {
+            queueMetrics.recordWaitingTime(concertId, polledUser.waitingTimeMs());
+            queueMetrics.incrementProcessingEntered(concertId);
+        }
+
+        return userIds;
     }
 
     private String moveOneToProcessing(Long concertId) {
@@ -86,19 +102,28 @@ public class RedisQueueService implements QueueService {
             return null;
         }
 
-        String userId = waitingQueue.pollTopUser(concertId);
-        if (userId != null) {
-            processingSet.add(concertId, userId);
+        PolledUser polledUser = waitingQueue.pollTopUserWithWaitingTime(concertId);
+        if (polledUser != null) {
+            processingSet.add(concertId, polledUser.userId());
+            queueMetrics.recordWaitingTime(concertId, polledUser.waitingTimeMs());
+            queueMetrics.incrementProcessingEntered(concertId);
+            return polledUser.userId();
         }
-        return userId;
+        return null;
     }
 
-    private void validateUniqueEntry(Long concertId, String userId) {
+    private void validateEntry(Long concertId, String userId) {
         if (processingSet.contains(concertId, userId)) {
+            queueMetrics.incrementQueueRejected(concertId, "duplicate");
             throw new AlreadyInQueueException("이미 입장한 사용자입니다.");
         }
         if (waitingQueue.contains(concertId, userId)) {
+            queueMetrics.incrementQueueRejected(concertId, "duplicate");
             throw new AlreadyInQueueException("이미 대기열에 등록된 사용자입니다.");
+        }
+        if (!waitingQueue.hasCapacity(concertId)) {
+            queueMetrics.incrementQueueRejected(concertId, "full");
+            throw new QueueFullException("현재 대기 인원이 많아 접수가 어렵습니다. 잠시 후 다시 시도해주세요.");
         }
     }
 }
