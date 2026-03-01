@@ -129,6 +129,10 @@ public class SseEmitterService {
                 .collect(Collectors.toSet());
     }
 
+    public int getActiveConnectionCount() {
+        return emitters.size();
+    }
+
     public void broadcastPositions(Long concertId, List<String> waitingUsers) {
         for (int i = 0; i < waitingUsers.size(); i++) {
             sendEvent(concertId, waitingUsers.get(i), QueueEventType.QUEUE_POSITION, new QueuePositionEvent(i));
