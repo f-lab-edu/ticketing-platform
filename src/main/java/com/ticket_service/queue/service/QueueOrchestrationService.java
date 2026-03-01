@@ -33,7 +33,7 @@ public class QueueOrchestrationService {
         if (queueService.hasProcessingCapacity(concertId)) {
             enterNextAndNotify(concertId);
         } else {
-            sseEmitterService.sendEvent(concertId, userId, QueueEventType.QUEUE_POSITION, new QueuePositionEvent(position));
+            sseEmitterService.sendEventAsync(concertId, userId, QueueEventType.QUEUE_POSITION, new QueuePositionEvent(position));
         }
 
         return emitter;

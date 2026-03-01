@@ -82,7 +82,7 @@ class QueueOrchestrationServiceTest {
 
             // then
             assertThat(result).isSameAs(mockEmitter);
-            verify(sseEmitterService).sendEvent(eq(CONCERT_ID), eq(USER_ID),
+            verify(sseEmitterService).sendEventAsync(eq(CONCERT_ID), eq(USER_ID),
                     eq(QueueEventType.QUEUE_POSITION), any(QueuePositionEvent.class));
         }
     }
