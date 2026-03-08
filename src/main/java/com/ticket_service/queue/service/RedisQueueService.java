@@ -8,6 +8,7 @@ import com.ticket_service.queue.exception.QueueFullException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -15,7 +16,7 @@ import java.util.List;
 public class RedisQueueService implements QueueService {
 
     private final WaitingQueue waitingQueue;
-    private final ProcessingSet processingSet;
+    private final ProcessingCounter processingCounter;
     private final RedissonLockTemplate redissonLockTemplate;
     private final QueueMetrics queueMetrics;
 
@@ -34,18 +35,19 @@ public class RedisQueueService implements QueueService {
 
     @Override
     public void completeProcessing(Long concertId, String userId) {
-        processingSet.remove(concertId, userId);
+        processingCounter.decrement(concertId);
     }
 
     @Override
     public void removeFromQueue(Long concertId, String userId) {
         waitingQueue.remove(concertId, userId);
-        processingSet.remove(concertId, userId);
     }
 
     @Override
     public boolean isInProcessing(Long concertId, String userId) {
-        return processingSet.contains(concertId, userId);
+        // JWT 토큰 기반 인가로 대체되어 더 이상 개별 사용자 추적 불필요
+        // 호환성을 위해 false 반환
+        return false;
     }
 
     @Override
@@ -60,7 +62,7 @@ public class RedisQueueService implements QueueService {
 
     @Override
     public boolean hasProcessingCapacity(Long concertId) {
-        return processingSet.hasCapacity(concertId);
+        return processingCounter.remainingCapacity(concertId) > 0;
     }
 
     @Override
@@ -73,7 +75,7 @@ public class RedisQueueService implements QueueService {
     }
 
     private List<String> moveToProcessing(Long concertId) {
-        long limit = processingSet.remainingCapacity(concertId);
+        int limit = processingCounter.remainingCapacity(concertId);
         if (limit <= 0) {
             return List.of();
         }
@@ -83,40 +85,39 @@ public class RedisQueueService implements QueueService {
             return List.of();
         }
 
-        List<String> userIds = polledUsers.stream()
-                .map(PolledUser::userId)
-                .toList();
+        // 분산락이 보장된 상태이므로 일괄 증가
+        processingCounter.incrementBy(concertId, polledUsers.size());
 
-        processingSet.addAll(concertId, userIds);
-
+        List<String> enteredUsers = new ArrayList<>();
         for (PolledUser polledUser : polledUsers) {
+            enteredUsers.add(polledUser.userId());
             queueMetrics.recordWaitingTime(concertId, polledUser.waitingTimeMs());
             queueMetrics.incrementProcessingEntered(concertId);
         }
 
-        return userIds;
+        return enteredUsers;
     }
 
     private String moveOneToProcessing(Long concertId) {
-        if (!processingSet.hasCapacity(concertId)) {
+        if (processingCounter.remainingCapacity(concertId) <= 0) {
             return null;
         }
 
         PolledUser polledUser = waitingQueue.pollTopUserWithWaitingTime(concertId);
         if (polledUser != null) {
-            processingSet.add(concertId, polledUser.userId());
-            queueMetrics.recordWaitingTime(concertId, polledUser.waitingTimeMs());
-            queueMetrics.incrementProcessingEntered(concertId);
-            return polledUser.userId();
+            if (processingCounter.tryIncrement(concertId)) {
+                queueMetrics.recordWaitingTime(concertId, polledUser.waitingTimeMs());
+                queueMetrics.incrementProcessingEntered(concertId);
+                return polledUser.userId();
+            } else {
+                // 카운터 증가 실패 시 대기열에 다시 추가
+                waitingQueue.add(concertId, polledUser.userId());
+            }
         }
         return null;
     }
 
     private void validateEntry(Long concertId, String userId) {
-        if (processingSet.contains(concertId, userId)) {
-            queueMetrics.incrementQueueRejected(concertId, "duplicate");
-            throw new AlreadyInQueueException("이미 입장한 사용자입니다.");
-        }
         if (waitingQueue.contains(concertId, userId)) {
             queueMetrics.incrementQueueRejected(concertId, "duplicate");
             throw new AlreadyInQueueException("이미 대기열에 등록된 사용자입니다.");

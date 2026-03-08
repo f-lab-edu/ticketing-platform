@@ -27,10 +27,10 @@ public class QueueController {
         return queueOrchestrationService.registerAndSubscribe(concertId, request.getUserId());
     }
 
-    /** 대기열 취소 */
+    /** 대기열 취소 (아직 입장 전인 사용자) */
     @DeleteMapping("/{concertId}")
     public ApiResponse<String> cancel(@PathVariable Long concertId, @RequestParam String userId) {
-        queueOrchestrationService.onCancel(concertId, userId);
+        queueOrchestrationService.onWaitingCancel(concertId, userId);
         return ApiResponse.ok("cancelled");
     }
 }
