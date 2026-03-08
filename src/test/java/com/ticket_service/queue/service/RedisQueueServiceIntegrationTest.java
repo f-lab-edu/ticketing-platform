@@ -32,12 +32,15 @@ class RedisQueueServiceIntegrationTest {
     private QueueService queueService;
 
     @Autowired
+    private ProcessingCounter processingCounter;
+
+    @Autowired
     private RedisTemplate<String, String> queueRedisTemplate;
 
     private static final Long CONCERT_ID = 1L;
     private static final int THREAD_POOL_SIZE = 32;
 
-    @Value("${queue.max-processing-count}")
+    @Value("${processing.max-count}")
     private int maxProcessingCount;
 
     @BeforeEach
@@ -52,9 +55,9 @@ class RedisQueueServiceIntegrationTest {
 
     private void clearQueue() {
         String waitingKey = QueueKey.waitingQueue(CONCERT_ID);
-        String processingKey = QueueKey.processingSet(CONCERT_ID);
+        String counterKey = QueueKey.processingCounter(CONCERT_ID);
         queueRedisTemplate.delete(waitingKey);
-        queueRedisTemplate.delete(processingKey);
+        queueRedisTemplate.delete(counterKey);
     }
 
     @Nested
@@ -171,8 +174,8 @@ class RedisQueueServiceIntegrationTest {
             // then - maxProcessingCount만큼 입장
             assertThat(enteredUsers).hasSize(maxProcessingCount);
 
-            String processingKey = QueueKey.processingSet(CONCERT_ID);
-            Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
+            // 카운터 확인
+            int processingCount = processingCounter.getCount(CONCERT_ID);
             assertThat(processingCount).isEqualTo(maxProcessingCount);
 
             // 대기열에 나머지 남아있는지 확인
@@ -217,7 +220,7 @@ class RedisQueueServiceIntegrationTest {
                 queueService.enterWaitingQueue(CONCERT_ID, userId);
             }
 
-            // 처리열의 50명 완료
+            // 처리열의 50명 완료 (카운터 감소)
             for (int i = 0; i < 50; i++) {
                 queueService.completeProcessing(CONCERT_ID, "user-" + i);
             }
@@ -228,49 +231,45 @@ class RedisQueueServiceIntegrationTest {
             // then - 50명 입장
             assertThat(enteredUsers).hasSize(50);
 
-            String processingKey = QueueKey.processingSet(CONCERT_ID);
-            Long processingCount = queueRedisTemplate.opsForSet().size(processingKey);
+            // 카운터가 maxProcessingCount인지 확인
+            int processingCount = processingCounter.getCount(CONCERT_ID);
             assertThat(processingCount).isEqualTo(maxProcessingCount);
         }
     }
 
     @Nested
-    @DisplayName("isInProcessingQueue 테스트")
-    class IsInProcessingQueueTest {
+    @DisplayName("처리 카운터 테스트")
+    class ProcessingCounterTest {
 
-        @DisplayName("입장시킨 사용자는 처리열에 있음")
+        @DisplayName("입장 후 카운터 확인")
         @Test
-        void isInProcessingQueue_after_enter() {
+        void counter_after_enter() {
             // given
             String userId = "user-1";
             queueService.enterWaitingQueue(CONCERT_ID, userId);
             queueService.permitProcessing(CONCERT_ID);
 
             // when
-            boolean result = queueService.isInProcessing(CONCERT_ID, userId);
+            int count = processingCounter.getCount(CONCERT_ID);
 
             // then
-            assertThat(result).isTrue();
+            assertThat(count).isEqualTo(1);
         }
 
-        @DisplayName("대기열에만 있는 사용자는 처리열에 없음")
+        @DisplayName("완료 후 카운터 감소")
         @Test
-        void isInProcessingQueue_waiting_user() {
-            // given - 처리열 가득 채우기
-            for (int i = 0; i < maxProcessingCount; i++) {
-                queueService.enterWaitingQueue(CONCERT_ID, "user-" + i);
-            }
+        void counter_after_complete() {
+            // given
+            String userId = "user-1";
+            queueService.enterWaitingQueue(CONCERT_ID, userId);
             queueService.permitProcessing(CONCERT_ID);
 
-            // 대기열에만 있는 사용자
-            String waitingUser = "waiting-user";
-            queueService.enterWaitingQueue(CONCERT_ID, waitingUser);
-
             // when
-            boolean result = queueService.isInProcessing(CONCERT_ID, waitingUser);
+            queueService.completeProcessing(CONCERT_ID, userId);
 
             // then
-            assertThat(result).isFalse();
+            int count = processingCounter.getCount(CONCERT_ID);
+            assertThat(count).isEqualTo(0);
         }
     }
 
@@ -278,7 +277,7 @@ class RedisQueueServiceIntegrationTest {
     @DisplayName("전체 플로우 테스트")
     class FullFlowTest {
 
-        @DisplayName("등록 → enterNextUsers → 처리열 확인 → 완료 플로우")
+        @DisplayName("등록 → enterNextUsers → 카운터 확인 → 완료 플로우")
         @Test
         void full_queue_flow() {
             // given
@@ -292,12 +291,12 @@ class RedisQueueServiceIntegrationTest {
             List<String> entered = queueService.permitProcessing(CONCERT_ID);
             assertThat(entered).contains(userId);
 
-            // 3. 처리열 확인
-            assertThat(queueService.isInProcessing(CONCERT_ID, userId)).isTrue();
+            // 3. 카운터 확인
+            assertThat(processingCounter.getCount(CONCERT_ID)).isEqualTo(1);
 
             // 4. 완료
             queueService.completeProcessing(CONCERT_ID, userId);
-            assertThat(queueService.isInProcessing(CONCERT_ID, userId)).isFalse();
+            assertThat(processingCounter.getCount(CONCERT_ID)).isEqualTo(0);
         }
     }
 }
