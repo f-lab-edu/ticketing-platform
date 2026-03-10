@@ -79,8 +79,18 @@ public class Seat {
                 && !isHoldExpired(holdTimeout);
     }
 
+    public void startPayment() {
+        this.status = SeatStatus.PAYING;
+    }
+
+    public void cancelPayment() {
+        this.status = SeatStatus.HELD;
+    }
+
     public void reserve() {
         this.status = SeatStatus.RESERVED;
+        this.heldByUserId = null;
+        this.heldAt = null;
     }
 
     public boolean isAvailable() {
@@ -97,5 +107,13 @@ public class Seat {
 
     public boolean isReserved() {
         return this.status == SeatStatus.RESERVED;
+    }
+
+    public boolean isPaying() {
+        return this.status == SeatStatus.PAYING;
+    }
+
+    public boolean isPayingBy(String userId) {
+        return this.status == SeatStatus.PAYING && userId.equals(this.heldByUserId);
     }
 }
