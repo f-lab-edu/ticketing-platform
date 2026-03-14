@@ -20,9 +20,9 @@ public class QueueEventPublisher {
     private final ObjectMapper objectMapper;
 
     @Async("sseTaskExecutor")
-    public void publishEnterEvent(Long concertId, String userId) {
+    public void publishEnterEvent(Long concertId, String userId, String token) {
         try {
-            QueueEnterMessage message = QueueEnterMessage.of(concertId, userId);
+            QueueEnterMessage message = QueueEnterMessage.of(concertId, userId, token);
             String json = objectMapper.writeValueAsString(message);
             queueRedisTemplate.convertAndSend(QUEUE_ENTER_CHANNEL, json);
             log.info("[PUB] 입장 이벤트 발행: concertId={}, userId={}", concertId, userId);

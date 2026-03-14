@@ -54,9 +54,7 @@ public class SseEmitterService {
 
         emitters.computeIfPresent(key, (k, emitter) -> {
             try {
-                emitter.send(SseEmitter.event()
-                        .name(eventType.getValue())
-                        .data(data));
+                doSend(emitter, eventType, data);
                 return emitter;
             } catch (IOException e) {
                 log.warn("SSE 이벤트 전송 실패: concertId={}, userId={}", concertId, userId, e);
@@ -87,9 +85,7 @@ public class SseEmitterService {
 
         emitters.computeIfPresent(key, (k, emitter) -> {
             try {
-                emitter.send(SseEmitter.event()
-                        .name(eventType.getValue())
-                        .data(data));
+                doSend(emitter, eventType, data);
                 sent.set(true);
                 emitter.complete();
             } catch (IOException e) {
@@ -123,6 +119,12 @@ public class SseEmitterService {
         return concertId + ":" + userId;
     }
 
+    private void doSend(SseEmitter emitter, QueueEventType eventType, Object data) throws IOException {
+        emitter.send(SseEmitter.event()
+                .name(eventType.getValue())
+                .data(data));
+    }
+
     public Set<Long> getActiveConcertIds() {
         return emitters.keySet().stream()
                 .map(key -> Long.parseLong(key.split(":")[0]))
@@ -133,12 +135,6 @@ public class SseEmitterService {
         return emitters.size();
     }
 
-    public void broadcastPositions(Long concertId, List<String> waitingUsers) {
-        for (int i = 0; i < waitingUsers.size(); i++) {
-            sendEvent(concertId, waitingUsers.get(i), QueueEventType.QUEUE_POSITION, new QueuePositionEvent(i));
-        }
-    }
-
     /**
      * 비동기로 모든 대기자에게 순번 정보를 병렬 전송한다.
      * 모든 전송이 완료될 때까지 기다린다.
@@ -147,10 +143,11 @@ public class SseEmitterService {
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (int i = 0; i < waitingUsers.size(); i++) {
-            final int position = i;
-            CompletableFuture<Void> future = CompletableFuture.runAsync(
-                    () -> sendEvent(concertId, waitingUsers.get(position), QueueEventType.QUEUE_POSITION, new QueuePositionEvent(position)),
-                    sseTaskExecutor
+            CompletableFuture<Void> future = sendEventAsync(
+                    concertId,
+                    waitingUsers.get(i),
+                    QueueEventType.QUEUE_POSITION,
+                    new QueuePositionEvent(i)
             );
             futures.add(future);
         }
@@ -168,6 +165,7 @@ public class SseEmitterService {
 
         emitter.onError(e -> {
             log.warn("SSE 연결 오류: concertId={}, userId={}", concertId, userId, e);
+            emitters.remove(key, emitter);
         });
     }
 }
