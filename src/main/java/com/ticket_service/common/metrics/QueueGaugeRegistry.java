@@ -1,7 +1,7 @@
 package com.ticket_service.common.metrics;
 
 import com.ticket_service.common.redis.RedissonLockTemplate;
-import com.ticket_service.queue.service.ProcessingSet;
+import com.ticket_service.queue.service.ProcessingCounter;
 import com.ticket_service.queue.service.SseEmitterService;
 import com.ticket_service.queue.service.WaitingQueue;
 import com.ticket_service.ticket.entity.TicketStock;
@@ -27,7 +27,7 @@ public class QueueGaugeRegistry {
 
     private final MeterRegistry meterRegistry;
     private final WaitingQueue waitingQueue;
-    private final ProcessingSet processingSet;
+    private final ProcessingCounter processingCounter;
     private final SseEmitterService sseEmitterService;
     private final RedissonLockTemplate redissonLockTemplate;
     private final TicketStockRepository ticketStockRepository;
@@ -81,7 +81,7 @@ public class QueueGaugeRegistry {
                     .register(meterRegistry);
             return value;
         });
-        gaugeValue.set(processingSet.size(concertId));
+        gaugeValue.set(processingCounter.getCount(concertId));
     }
 
     private void updateSseConnectionsGauge() {

@@ -19,12 +19,14 @@ redis:
     lease-time: 3s
 
 queue:
-  max-processing-count: 200
   max-waiting-count: 20000
   entry-timeout: 5m
   waiting-timeout: 30m
   sse-timeout: 10m
   position-broadcast-interval: 5s
+
+processing:
+  max-count: 200
 
 sse:
   thread-pool:
@@ -40,3 +42,11 @@ management:
 ticket:
   lock:
     strategy: pessimistic
+
+seat:
+  hold-timeout: 5m
+  hold-check-interval: 30s
+
+jwt:
+  secret: your-256-bit-secret-key-for-queue-token-generation-must-be-long-enough
+  expiration: 10m
