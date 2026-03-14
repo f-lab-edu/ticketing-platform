@@ -33,6 +33,10 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
     @Query("SELECT s FROM Seat s WHERE s.id = :seatId AND s.concert.id = :concertId")
     Optional<Seat> findByIdAndConcertIdWithLock(@Param("seatId") Long seatId, @Param("concertId") Long concertId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Seat s WHERE s.id = :seatId")
+    Optional<Seat> findByIdWithLock(@Param("seatId") Long seatId);
+
     @Query("SELECT s FROM Seat s WHERE s.status = :status AND s.heldAt < :expiredBefore")
     List<Seat> findExpiredHolds(@Param("status") SeatStatus status, @Param("expiredBefore") LocalDateTime expiredBefore);
 
