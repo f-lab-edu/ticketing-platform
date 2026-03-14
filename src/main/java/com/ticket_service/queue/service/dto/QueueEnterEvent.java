@@ -8,8 +8,9 @@ import lombok.RequiredArgsConstructor;
 public class QueueEnterEvent {
 
     private final String status;
+    private final String token;
 
-    public static QueueEnterEvent processing() {
-        return new QueueEnterEvent("PROCESSING");
+    public static QueueEnterEvent processing(String token) {
+        return new QueueEnterEvent("PROCESSING", token);
     }
 }

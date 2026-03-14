@@ -39,12 +39,13 @@ public class QueueEventSubscriber implements MessageListener {
 
             Long concertId = enterMessage.getConcertId();
             String userId = enterMessage.getUserId();
+            String token = enterMessage.getToken();
 
             sseEmitterService.sendEventAndCompleteAsync(
                     concertId,
                     userId,
                     QueueEventType.ENTER,
-                    QueueEnterEvent.processing()
+                    QueueEnterEvent.processing(token)
             ).thenAccept(sent -> {
                 if (sent) {
                     log.info("[SUB] 입장 이벤트 전송 성공: concertId={}, userId={}", concertId, userId);
