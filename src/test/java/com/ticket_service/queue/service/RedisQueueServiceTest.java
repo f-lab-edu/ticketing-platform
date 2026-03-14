@@ -34,7 +34,7 @@ class RedisQueueServiceTest {
     private WaitingQueue waitingQueue;
 
     @Mock
-    private ProcessingSet processingSet;
+    private ProcessingCounter processingCounter;
 
     @Mock
     private RedissonLockTemplate redissonLockTemplate;
@@ -49,7 +49,7 @@ class RedisQueueServiceTest {
 
     @BeforeEach
     void setUp() {
-        redisQueueService = new RedisQueueService(waitingQueue, processingSet, redissonLockTemplate, queueMetrics);
+        redisQueueService = new RedisQueueService(waitingQueue, processingCounter, redissonLockTemplate, queueMetrics);
 
         given(redissonLockTemplate.executeWithLock(anyString(), any(Supplier.class)))
                 .willAnswer(invocation -> {
@@ -70,7 +70,6 @@ class RedisQueueServiceTest {
         @DisplayName("대기열 등록 성공 - 첫 번째 사용자")
         @Test
         void enqueue_success_first_user() {
-            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.hasCapacity(CONCERT_ID)).willReturn(true);
             given(waitingQueue.rank(CONCERT_ID, USER_ID)).willReturn(0L);
@@ -84,7 +83,6 @@ class RedisQueueServiceTest {
         @DisplayName("대기열 등록 실패 - 대기열이 가득 참")
         @Test
         void enqueue_fail_queue_full() {
-            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.hasCapacity(CONCERT_ID)).willReturn(false);
 
@@ -93,20 +91,9 @@ class RedisQueueServiceTest {
                     .hasMessage("현재 대기 인원이 많아 접수가 어렵습니다. 잠시 후 다시 시도해주세요.");
         }
 
-        @DisplayName("대기열 등록 실패 - 이미 처리중인 사용자")
-        @Test
-        void enqueue_fail_already_processing() {
-            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(true);
-
-            assertThatThrownBy(() -> redisQueueService.enterWaitingQueue(CONCERT_ID, USER_ID))
-                    .isInstanceOf(AlreadyInQueueException.class)
-                    .hasMessage("이미 입장한 사용자입니다.");
-        }
-
         @DisplayName("대기열 등록 실패 - 이미 대기열에 등록된 사용자")
         @Test
         void enqueue_fail_already_in_waiting_queue() {
-            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
             given(waitingQueue.contains(CONCERT_ID, USER_ID)).willReturn(true);
 
             assertThatThrownBy(() -> redisQueueService.enterWaitingQueue(CONCERT_ID, USER_ID))
@@ -119,12 +106,12 @@ class RedisQueueServiceTest {
     @DisplayName("complete 메서드")
     class CompleteTest {
 
-        @DisplayName("완료 처리 성공 - 처리중에서 제거")
+        @DisplayName("완료 처리 성공 - 카운터 감소")
         @Test
         void complete_success() {
             redisQueueService.completeProcessing(CONCERT_ID, USER_ID);
 
-            verify(processingSet).remove(CONCERT_ID, USER_ID);
+            verify(processingCounter).decrement(CONCERT_ID);
         }
     }
 
@@ -132,35 +119,22 @@ class RedisQueueServiceTest {
     @DisplayName("dequeue 메서드")
     class DequeueTest {
 
-        @DisplayName("대기열 취소 성공 - 대기열과 처리중 모두에서 제거")
+        @DisplayName("대기열 취소 성공 - 대기열에서 제거")
         @Test
         void dequeue_success() {
             redisQueueService.removeFromQueue(CONCERT_ID, USER_ID);
 
             verify(waitingQueue).remove(CONCERT_ID, USER_ID);
-            verify(processingSet).remove(CONCERT_ID, USER_ID);
         }
     }
 
     @Nested
-    @DisplayName("isInprocessingSet 메서드")
-    class IsInprocessingSetTest {
+    @DisplayName("isInProcessing 메서드")
+    class IsInProcessingTest {
 
-        @DisplayName("처리열에 있는 사용자 - true 반환")
+        @DisplayName("JWT 토큰 기반 인가로 대체되어 항상 false 반환")
         @Test
-        void isInprocessingSet_true() {
-            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(true);
-
-            boolean result = redisQueueService.isInProcessing(CONCERT_ID, USER_ID);
-
-            assertThat(result).isTrue();
-        }
-
-        @DisplayName("처리열에 없는 사용자 - false 반환")
-        @Test
-        void isInprocessingSet_false() {
-            given(processingSet.contains(CONCERT_ID, USER_ID)).willReturn(false);
-
+        void isInProcessing_returns_false() {
             boolean result = redisQueueService.isInProcessing(CONCERT_ID, USER_ID);
 
             assertThat(result).isFalse();
@@ -174,7 +148,7 @@ class RedisQueueServiceTest {
         @DisplayName("가용 슬롯이 있고 대기자가 있으면 입장시킴")
         @Test
         void enterNextUsers_success() {
-            given(processingSet.remainingCapacity(CONCERT_ID)).willReturn(5L);
+            given(processingCounter.remainingCapacity(CONCERT_ID)).willReturn(5);
             given(waitingQueue.pollTopUsersWithWaitingTime(CONCERT_ID, 5)).willReturn(List.of(
                     new PolledUser("user-1", 1000L),
                     new PolledUser("user-2", 2000L),
@@ -184,7 +158,7 @@ class RedisQueueServiceTest {
             List<String> enteredUsers = redisQueueService.permitProcessing(CONCERT_ID);
 
             assertThat(enteredUsers).containsExactly("user-1", "user-2", "user-3");
-            verify(processingSet).addAll(CONCERT_ID, List.of("user-1", "user-2", "user-3"));
+            verify(processingCounter).incrementBy(CONCERT_ID, 3);
             verify(queueMetrics).recordWaitingTime(CONCERT_ID, 1000L);
             verify(queueMetrics).recordWaitingTime(CONCERT_ID, 2000L);
             verify(queueMetrics).recordWaitingTime(CONCERT_ID, 3000L);
@@ -193,7 +167,7 @@ class RedisQueueServiceTest {
         @DisplayName("가용 슬롯이 없으면 빈 목록 반환")
         @Test
         void enterNextUsers_no_available_slots() {
-            given(processingSet.remainingCapacity(CONCERT_ID)).willReturn(0L);
+            given(processingCounter.remainingCapacity(CONCERT_ID)).willReturn(0);
 
             List<String> enteredUsers = redisQueueService.permitProcessing(CONCERT_ID);
 
@@ -204,7 +178,7 @@ class RedisQueueServiceTest {
         @DisplayName("대기열이 비어있으면 빈 목록 반환")
         @Test
         void enterNextUsers_empty_waiting_queue() {
-            given(processingSet.remainingCapacity(CONCERT_ID)).willReturn(100L);
+            given(processingCounter.remainingCapacity(CONCERT_ID)).willReturn(100);
             given(waitingQueue.pollTopUsersWithWaitingTime(CONCERT_ID, 100)).willReturn(List.of());
 
             List<String> enteredUsers = redisQueueService.permitProcessing(CONCERT_ID);
